@@ -33,6 +33,7 @@ class PointCloud:
         self.showing = None
         self.index = None
         self.filename = filename
+        self.saved_cameras = {}
         if filename is None:
             self.render_flag = False
         else:
@@ -465,36 +466,14 @@ class PointCloud:
             self.viewer.close()
         self.viewer = None
 
-    def render(self, mask=None, indices=None, highlighted=False, showing=False, invert=False):
+    def update_attributes(self):
         """
-        This function allows the user to render some selection of the points to the viewer.
-        By default, this function will render all points when called. If a mask is supplied, then those points
-        will be rendered. If the highlighted or showing flags are True, then the appropriate selection will be used.
-        :param mask: Mask object indicating which points to render.
-        :param highlighted: If True, then render the currently highlighted points.
-        :param showing: If True, then re-render all of the currently rendered points.
+        Refresh attributes (colors, classes, user_data, intensity) of currently rendered points
+        without clearing the geometry buffer or resetting the camera.
         """
-        print("\nRendering\n")
-        if not self.render_flag:
+        if not self.viewer_is_ready():
             return
-
-        if mask is None:
-            mask = self.select(
-                indices=indices, highlighted=highlighted, showing=showing, invert=invert)
-
-        if not np.sum(mask[:]):
-            return
-
-        self.showing.set(mask[:])
-
-        if self.viewer_is_ready():
-            self.viewer.clear()
-            self.viewer.load(self.points.loc[mask[:], ['x', 'y', 'z']])
-        else:
-            pcd = self.points.loc[mask[:]][['x', 'y', 'z']]
-            self.viewer = pptk.viewer(pcd)
-
-        self.viewer.set(point_size=self.point_size, selected=[])
+        mask = self.showing
         if 'r' in self.points:
             scale = 255.0
             if 'user_data' in self.points and 'intensity' in self.points:
@@ -515,6 +494,46 @@ class PointCloud:
                                        self.points.loc[mask[:], 'class'])
         else:
             self.viewer.attributes(self.points.loc[mask[:], 'class'])
+
+    def render(self, mask=None, indices=None, highlighted=False, showing=False, invert=False, preserve_camera=True):
+        """
+        This function allows the user to render some selection of the points to the viewer.
+        By default, this function will render all points when called. If a mask is supplied, then those points
+        will be rendered. If the highlighted or showing flags are True, then the appropriate selection will be used.
+        :param mask: Mask object indicating which points to render.
+        :param highlighted: If True, then render the currently highlighted points.
+        :param showing: If True, then re-render all of the currently rendered points.
+        :param preserve_camera: If True, preserves current camera orientation and position.
+        """
+        print("\nRendering\n")
+        if not self.render_flag:
+            return
+
+        cam_persp = None
+        if preserve_camera and self.viewer_is_ready():
+            cam_persp = self.get_perspective()
+
+        if mask is None:
+            mask = self.select(
+                indices=indices, highlighted=highlighted, showing=showing, invert=invert)
+
+        if not np.sum(mask[:]):
+            return
+
+        self.showing.set(mask[:])
+
+        if self.viewer_is_ready():
+            self.viewer.clear()
+            self.viewer.load(self.points.loc[mask[:], ['x', 'y', 'z']])
+        else:
+            pcd = self.points.loc[mask[:]][['x', 'y', 'z']]
+            self.viewer = pptk.viewer(pcd)
+
+        self.viewer.set(point_size=self.point_size, selected=[])
+        self.update_attributes()
+
+        if cam_persp is not None and preserve_camera:
+            self.set_perspective(cam_persp)
 
     def renderClass(self,colores=True, mask=None, indices=None, highlighted=False, showing=False, invert=False):
         """
@@ -603,15 +622,18 @@ class PointCloud:
         """
         This function captures the current perspective of the viewer and returns its parameters so that the user
         can return to this perspective later or use it in a rendering sequence.
-        :return: Perspective parameters (x, y, z, phi, theta, r).
+        :return: Perspective parameters (lookat[0], lookat[1], lookat[2], phi, theta, r).
         """
         if not self.viewer_is_ready():
             return [0, 0, 0, 0, 0, 0]
-        x, y, z = self.viewer.get('eye')
-        phi = self.viewer.get('phi')
-        theta = self.viewer.get('theta')
-        r = self.viewer.get('r')
-        return [x, y, z, phi, theta, r]
+        try:
+            lookat = self.viewer.get('lookat')
+            phi = self.viewer.get('phi')
+            theta = self.viewer.get('theta')
+            r = self.viewer.get('r')
+            return [float(lookat[0]), float(lookat[1]), float(lookat[2]), float(phi), float(theta), float(r)]
+        except Exception:
+            return [0, 0, 0, 0, 0, 0]
 
     def set_perspective(self, p):
         """
@@ -619,8 +641,24 @@ class PointCloud:
         its single argument where the list defines the lookat position (x, y, z) the azimuthal angle, the elevation
         angle, and the distance from the lookat position. This list is returned from the method 'get_perspective()'.
         """
-        if self.viewer_is_ready():
-            self.viewer.set(lookat=p[0:3], phi=p[3], theta=p[4], r=p[5])
+        if self.viewer_is_ready() and p is not None and len(p) >= 6:
+            try:
+                self.viewer.set(lookat=p[0:3], phi=p[3], theta=p[4], r=p[5])
+            except Exception as e:
+                print("Error setting perspective:", e)
+
+    def save_camera(self, name='default'):
+        """Save current camera perspective."""
+        persp = self.get_perspective()
+        self.saved_cameras[name] = persp
+        return persp
+
+    def restore_camera(self, name='default'):
+        """Restore camera perspective."""
+        if name in self.saved_cameras:
+            self.set_perspective(self.saved_cameras[name])
+            return True
+        return False
 
     def select(self, indices=None, highlighted=True, showing=False, classes=None, data=None, intensity=None,
                red=None, green=None, blue=None, compliment=False, invert=False):
@@ -688,7 +726,7 @@ class PointCloud:
             mask.compliment()
         return mask
 
-    def classify(self, cls, overwrite=False, mask=None):
+    def classify(self, cls, overwrite=False, mask=None, preserve_camera=True):
         """
         Set the class of the currently selected points to cls. If the class is already set, then only
         overwrite the old value if "overwrite" is True.
@@ -698,7 +736,13 @@ class PointCloud:
         if not overwrite:
             mask.intersection(self.points['class'] == 0)
         self.points.loc[mask.bools, 'class'] = cls
-        self.render(showing=True)
+        if self.viewer_is_ready():
+            self.update_attributes()
+            self.viewer.set(selected=[])
+            if not preserve_camera:
+                self.render(showing=True, preserve_camera=False)
+        else:
+            self.render(showing=True, preserve_camera=preserve_camera)
 
     def center(self):
         """
