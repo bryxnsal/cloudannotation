@@ -34,6 +34,7 @@ class PointCloud:
         self.index = None
         self.filename = filename
         self.saved_cameras = {}
+        self.active_roi = None
         if filename is None:
             self.render_flag = False
         else:
@@ -594,9 +595,15 @@ class PointCloud:
         """
         mask = Mask(len(self.points), False)
         if self.viewer_is_ready():
-            selection = self.viewer.get('selected')
+            try:
+                selection = self.viewer.get('selected')
+            except Exception:
+                selection = []
+            if selection is None or len(selection) == 0:
+                if invert:
+                    mask.bools = self.showing.bools.copy()
+                return mask
             if invert:
-                print("It only works when all the points are being rendered")
                 unselection = np.arange(0, len(self.points))
                 unselection = unselection[np.in1d(
                     unselection, selection, invert=True)]
@@ -605,6 +612,30 @@ class PointCloud:
             else:
                 mask.setr_subset(selection, self.showing)
                 return mask
+        return mask
+
+    def has_selection(self):
+        """Return True if points are currently highlighted in viewer."""
+        if not self.viewer_is_ready():
+            return False
+        try:
+            sel = self.viewer.get('selected')
+            return sel is not None and len(sel) > 0
+        except Exception:
+            return False
+
+    def set_work_area(self, mask):
+        """Lock active work area ROI."""
+        self.active_roi = Mask(len(self.points), False)
+        self.active_roi.bools = mask.bools.copy()
+
+    def clear_work_area(self):
+        """Clear active work area ROI."""
+        self.active_roi = None
+
+    def is_work_area_active(self):
+        """Check if work area ROI is currently active."""
+        return self.active_roi is not None and np.sum(self.active_roi.bools) > 0
 
     def highlight(self, mask=None, indices=None):
         """

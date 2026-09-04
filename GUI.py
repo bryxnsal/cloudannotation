@@ -132,8 +132,9 @@ class ModernAnnotationGUI:
         
         ttk.Button(button_row, text="All", 
                    command=self.render_all).pack(side='left', padx=(0, 2), fill='x', expand=True)
-        ttk.Button(button_row, text="Select", 
-                   command=self.render_selection).pack(side='left', padx=(2, 2), fill='x', expand=True)
+        self.select_btn = ttk.Button(button_row, text="Select", 
+                                     command=self.toggle_selection_mode)
+        self.select_btn.pack(side='left', padx=(2, 2), fill='x', expand=True)
         ttk.Button(button_row, text="Select Inv", 
                    command=self.render_selection_inv).pack(side='left', padx=(2, 2), fill='x', expand=True)
         ttk.Button(button_row, text="Multi", 
@@ -336,6 +337,10 @@ class ModernAnnotationGUI:
             self.log_message("No classification option selected", "WARNING")
             return
             
+        if not self.pc.has_selection():
+            self.log_message("No points are currently selected. Use Ctrl + Left Click to select points first.", "WARNING")
+            return
+
         label_value = Config.labels[selected_option]
         success_msg = f"Classified as {selected_option} (Label {label_value})"
         if overwrite:
@@ -350,26 +355,54 @@ class ModernAnnotationGUI:
     # ------------------ Rendering Methods ------------------
     def render_all(self):
         keep_cam = self.keep_camera_var.get()
+        if self.pc.is_work_area_active():
+            self.pc.clear_work_area()
+            self.select_btn.configure(text="Select")
         self.run_async(
             lambda: self.pc.render(preserve_camera=keep_cam),
             start_msg="Rendering full point cloud...",
             success_msg="Point cloud rendered successfully"
         )
 
-    def render_selection(self):
+    def toggle_selection_mode(self):
         keep_cam = self.keep_camera_var.get()
-        self.run_async(
-            lambda: self.pc.render(highlighted=True, preserve_camera=keep_cam),
-            start_msg="Rendering selection...",
-            success_msg="Selection rendered successfully"
-        )
+        if self.pc.is_work_area_active():
+            # Exit work area mode and restore full view
+            self.pc.clear_work_area()
+            self.select_btn.configure(text="Select")
+            self.run_async(
+                lambda: self.pc.render(preserve_camera=keep_cam),
+                start_msg="Restoring full point cloud...",
+                success_msg="Exited isolated work area"
+            )
+        else:
+            # Enter work area mode
+            if not self.pc.has_selection():
+                self.log_message("No points are currently selected. Use Ctrl + Left Click to select points first.", "WARNING")
+                return
+
+            mask = self.pc.get_highlighted_mask()
+            self.pc.set_work_area(mask)
+            self.select_btn.configure(text="Unselect")
+            self.run_async(
+                lambda: self.pc.render(mask, preserve_camera=keep_cam),
+                start_msg="Isolating selected work area...",
+                success_msg="Work area isolated (Use Multi to filter within this area, or Unselect to exit)"
+            )
 
     def render_selection_inv(self):
         keep_cam = self.keep_camera_var.get()
+        if not self.pc.has_selection():
+            self.log_message("No points are currently selected to invert. Use Ctrl + Left Click to select points first.", "WARNING")
+            return
+
+        mask = self.pc.get_highlighted_mask(invert=True)
+        self.pc.set_work_area(mask)
+        self.select_btn.configure(text="Unselect")
         self.run_async(
-            lambda: self.pc.render(highlighted=True, invert=True, preserve_camera=keep_cam),
-            start_msg="Rendering inverted selection...",
-            success_msg="Selection inverted successfully"
+            lambda: self.pc.render(mask, preserve_camera=keep_cam),
+            start_msg="Isolating inverted selection...",
+            success_msg="Inverted work area isolated"
         )
 
     def render_selected_labels(self):
@@ -382,11 +415,16 @@ class ModernAnnotationGUI:
         keep_cam = self.keep_camera_var.get()
 
         def task():
-            count = 0
-            for lbl in selected_labels:
-                count += (self.pc.points['class'] == lbl).sum()
-            if count > 0:
-                self.pc.render(self.pc.select(classes=selected_labels), preserve_camera=keep_cam)
+            if self.pc.is_work_area_active():
+                # Filter only within the active work area
+                mask = self.pc.select(classes=selected_labels, highlighted=False)
+                mask.intersection(self.pc.active_roi.bools)
+            else:
+                mask = self.pc.select(classes=selected_labels, highlighted=False)
+
+            import numpy as np
+            if np.sum(mask.bools) > 0:
+                self.pc.render(mask, preserve_camera=keep_cam)
                 return True
             return False
 
