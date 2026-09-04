@@ -41,6 +41,12 @@ class ModernAnnotationGUI:
         self.keep_camera_var = tk.BooleanVar(self.root, value=True)
         self.show_logs = tk.BooleanVar(self.root, value=False)
 
+        # Global Keyboard Shortcuts
+        self.root.bind('<Control-z>', lambda e: self.undo_action())
+        self.root.bind('<Control-Z>', lambda e: self.undo_action())
+        self.root.bind('<Control-y>', lambda e: self.redo_action())
+        self.root.bind('<Control-Y>', lambda e: self.redo_action())
+
         # Status tracking
         self.status_messages = []
 
@@ -108,7 +114,7 @@ class ModernAnnotationGUI:
         ttk.Button(top_row, text="Execute", style='Accent.TButton',
                    command=self.execute_selection).pack(side='right')
 
-        # Checkboxes row: Overwrite & Keep Camera Position
+        # Checkboxes row: Overwrite & Keep Camera Position and Undo button
         options_row = ttk.Frame(section_frame, style='Modern.TFrame')
         options_row.pack(fill='x')
 
@@ -119,6 +125,9 @@ class ModernAnnotationGUI:
         ttk.Checkbutton(options_row, text="Keep Camera Position", 
                         variable=self.keep_camera_var,
                         style='Modern.TCheckbutton').pack(side='left')
+
+        ttk.Button(options_row, text="Undo", 
+                   command=self.undo_action).pack(side='right', padx=(10, 0))
 
     def _create_rendering_section(self, parent):
         """Create rendering and camera view section."""
@@ -352,28 +361,70 @@ class ModernAnnotationGUI:
             success_msg=success_msg
         )
 
+    def undo_action(self):
+        def task():
+            return self.pc.undo()
+
+        def on_done(res):
+            if res:
+                success, msg = res
+                self.log_message(msg, "SUCCESS" if success else "WARNING")
+
+        self.run_async(
+            task,
+            start_msg="Undoing last action...",
+            on_success=on_done
+        )
+
+    def redo_action(self):
+        def task():
+            return self.pc.redo()
+
+        def on_done(res):
+            if res:
+                success, msg = res
+                self.log_message(msg, "SUCCESS" if success else "WARNING")
+
+        self.run_async(
+            task,
+            start_msg="Redoing action...",
+            on_success=on_done
+        )
+
     # ------------------ Rendering Methods ------------------
     def render_all(self):
         keep_cam = self.keep_camera_var.get()
-        if self.pc.is_work_area_active():
-            self.pc.clear_work_area()
+        def task():
+            if self.pc.is_work_area_active():
+                self.pc.clear_work_area()
+            self.pc.render(preserve_camera=keep_cam)
+
+        def on_done(_):
             self.select_btn.configure(text="Select")
+
         self.run_async(
-            lambda: self.pc.render(preserve_camera=keep_cam),
+            task,
             start_msg="Rendering full point cloud...",
-            success_msg="Point cloud rendered successfully"
+            success_msg="Point cloud rendered successfully",
+            on_success=on_done
         )
 
     def toggle_selection_mode(self):
         keep_cam = self.keep_camera_var.get()
         if self.pc.is_work_area_active():
             # Exit work area mode and restore full view
-            self.pc.clear_work_area()
-            self.select_btn.configure(text="Select")
+            def task():
+                self.pc.clear_work_area()
+                self.pc.render(preserve_camera=keep_cam)
+
+            def on_done(_):
+                self.select_btn.configure(text="Select")
+
             self.run_async(
-                lambda: self.pc.render(preserve_camera=keep_cam),
+                task,
                 start_msg="Restoring full point cloud...",
-                success_msg="Exited isolated work area"
+                success_msg="Exited isolated work area",
+                on_success=on_done
             )
         else:
             # Enter work area mode
@@ -381,13 +432,19 @@ class ModernAnnotationGUI:
                 self.log_message("No points are currently selected. Use Ctrl + Left Click to select points first.", "WARNING")
                 return
 
-            mask = self.pc.get_highlighted_mask()
-            self.pc.set_work_area(mask)
-            self.select_btn.configure(text="Unselect")
+            def task():
+                mask = self.pc.get_highlighted_mask()
+                self.pc.set_work_area(mask)
+                self.pc.render(mask, preserve_camera=keep_cam)
+
+            def on_done(_):
+                self.select_btn.configure(text="Unselect")
+
             self.run_async(
-                lambda: self.pc.render(mask, preserve_camera=keep_cam),
+                task,
                 start_msg="Isolating selected work area...",
-                success_msg="Work area isolated (Use Multi to filter within this area, or Unselect to exit)"
+                success_msg="Work area isolated (Use Multi to filter within this area, or Unselect to exit)",
+                on_success=on_done
             )
 
     def render_selection_inv(self):
@@ -396,13 +453,19 @@ class ModernAnnotationGUI:
             self.log_message("No points are currently selected to invert. Use Ctrl + Left Click to select points first.", "WARNING")
             return
 
-        mask = self.pc.get_highlighted_mask(invert=True)
-        self.pc.set_work_area(mask)
-        self.select_btn.configure(text="Unselect")
+        def task():
+            mask = self.pc.get_highlighted_mask(invert=True)
+            self.pc.set_work_area(mask)
+            self.pc.render(mask, preserve_camera=keep_cam)
+
+        def on_done(_):
+            self.select_btn.configure(text="Unselect")
+
         self.run_async(
-            lambda: self.pc.render(mask, preserve_camera=keep_cam),
+            task,
             start_msg="Isolating inverted selection...",
-            success_msg="Inverted work area isolated"
+            success_msg="Inverted work area isolated",
+            on_success=on_done
         )
 
     def render_selected_labels(self):
