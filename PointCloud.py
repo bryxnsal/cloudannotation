@@ -35,6 +35,9 @@ class PointCloud:
         self.filename = filename
         self.saved_cameras = {}
         self.active_roi = None
+        self.max_undo_steps = 50
+        self.undo_stack = []
+        self.redo_stack = []
         if filename is None:
             self.render_flag = False
         else:
@@ -762,10 +765,33 @@ class PointCloud:
         Set the class of the currently selected points to cls. If the class is already set, then only
         overwrite the old value if "overwrite" is True.
         """
+        sel_indices = []
+        if self.viewer_is_ready():
+            try:
+                sel = self.viewer.get('selected')
+                if sel is not None and len(sel) > 0:
+                    sel_indices = sel.copy() if hasattr(sel, 'copy') else list(sel)
+            except Exception:
+                sel_indices = []
+
         if mask is None:
             mask = self.get_highlighted_mask()
         if not overwrite:
             mask.intersection(self.points['class'] == 0)
+
+        modified_indices = np.where(mask.bools)[0]
+        if len(modified_indices) > 0:
+            old_classes = self.points.loc[modified_indices, 'class'].values.copy()
+            self.undo_stack.append({
+                'indices': modified_indices,
+                'old_classes': old_classes,
+                'new_class': cls,
+                'selection_indices': sel_indices
+            })
+            if len(self.undo_stack) > self.max_undo_steps:
+                self.undo_stack.pop(0)
+            self.redo_stack.clear()
+
         self.points.loc[mask.bools, 'class'] = cls
         if self.viewer_is_ready():
             self.update_attributes()
@@ -774,6 +800,61 @@ class PointCloud:
                 self.render(showing=True, preserve_camera=False)
         else:
             self.render(showing=True, preserve_camera=preserve_camera)
+
+    def undo(self):
+        """
+        Revert the last classification action and restore the active selection in the viewer.
+        """
+        if not self.undo_stack:
+            return False, "Nothing to undo"
+
+        action = self.undo_stack.pop()
+        indices = action['indices']
+        old_classes = action['old_classes']
+
+        current_classes = self.points.loc[indices, 'class'].values.copy()
+        self.redo_stack.append({
+            'indices': indices,
+            'old_classes': current_classes,
+            'new_class': action['new_class'],
+            'selection_indices': action.get('selection_indices', [])
+        })
+
+        self.points.loc[indices, 'class'] = old_classes
+        if self.viewer_is_ready():
+            self.update_attributes()
+            sel_indices = action.get('selection_indices', [])
+            if sel_indices is not None and len(sel_indices) > 0:
+                self.viewer.set(selected=sel_indices)
+            else:
+                self.highlight(indices=indices)
+
+        return True, f"Undo: Restored {len(indices)} points to previous classes"
+
+    def redo(self):
+        """
+        Re-apply the last undone action.
+        """
+        if not self.redo_stack:
+            return False, "Nothing to redo"
+
+        action = self.redo_stack.pop()
+        indices = action['indices']
+
+        current_classes = self.points.loc[indices, 'class'].values.copy()
+        self.undo_stack.append({
+            'indices': indices,
+            'old_classes': current_classes,
+            'new_class': action['new_class'],
+            'selection_indices': action.get('selection_indices', [])
+        })
+
+        self.points.loc[indices, 'class'] = action['new_class']
+        if self.viewer_is_ready():
+            self.update_attributes()
+            self.viewer.set(selected=[])
+
+        return True, f"Redo: Re-applied class {action['new_class']} on {len(indices)} points"
 
     def center(self):
         """
