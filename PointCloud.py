@@ -19,6 +19,8 @@ from plyfile import PlyData, PlyElement
 from core.viewer import CameraController, PptkViewerAdapter
 from core.io import PointCloudIO, PlyIO
 from core.history import UndoRedoManager
+from core.processing import PointCloudTransforms, SpatialQueries, PointCloudFilters
+
 
 
 
@@ -649,32 +651,16 @@ class PointCloud:
 
 
     def center(self):
-        """
-        Shift the origin of the point cloud to its centroid.
-        """
-        self.points[['x', 'y', 'z']
-                    ] -= np.average(self.points[['x', 'y', 'z']], axis=0)
+        """Shift the origin of the point cloud to its centroid."""
+        PointCloudTransforms.center(self.points)
 
     def reset_origin(self):
-        """
-        Shift the origin of the point cloud to the minimum of the point cloud.
-        """
-        self.points[['x', 'y', 'z']
-                    ] -= self.points[['x', 'y', 'z']].values.min(axis=0)
+        """Shift the origin of the point cloud to the minimum of the point cloud."""
+        PointCloudTransforms.reset_origin(self.points)
 
     def subsample(self, n=10000000, percent=1.0):
-        """
-        Return a random sample of the point cloud.
-        """
-        threshold = int(percent * len(self.points))
-        if n < threshold:
-            threshold = n
-        if threshold < len(self.points):
-            keep = np.zeros(len(self.points), dtype=bool)
-            keep[np.random.choice(len(self.points), threshold)] = True
-            return keep
-        else:
-            return np.ones(len(self.points), dtype=bool)
+        """Return a random sample boolean mask of the point cloud."""
+        return PointCloudTransforms.subsample(len(self.points), n=n, percent=percent)
 
     def add_points(self, points):
         """
@@ -682,8 +668,7 @@ class PointCloud:
         must have 'x' and 'y' columns, and cannot have any abnormal columns in it.
         """
         if not isinstance(points, pd.DataFrame):
-            print(
-                'Error: points must be in the form of a pandas DataFrame. Cannot append.')
+            print('Error: points must be in the form of a pandas DataFrame. Cannot append.')
             return
         if 'x' not in points.columns or 'y' not in points.columns:
             print('Error: missing x and/or y column data. Cannot append.')
@@ -692,47 +677,25 @@ class PointCloud:
             if c not in self.points.columns:
                 print('Error: unknown column', c, 'in points. Cannot append.')
                 return
-        self.points = self.points.append(points)
-        self.points = self.points.fillna(0)
+        self.points = pd.concat([self.points, points], ignore_index=True, sort=False).fillna(0)
 
     def slice(self, points=None, position=1.75, thickness=0.2, axis=2):
-        """
-        Take a planar slice of some thickness out of the data. The slice will be axis-aligned.
-        :param points: Set of points to take slice from. Default is all currently rendered points.
-        :param position: Position along axis to take slice from. Default is 1.75, set for slicing vertical poles above pallets.
-        :param thickness: Thickness of slice to take. Default is 0.2 (20 cm).
-        :param axis: Axis perpendicular to the slice of data. Must be 0, 1, or 2 (default is 2 (z-axis)).
-        """
-        if axis == 2:
-            str_axis = 'z'
-        elif axis == 1:
-            str_axis = 'y'
-        else:
-            str_axis = 'x'
+        """Take a planar slice of some thickness out of the data."""
         if points is None:
-            points = self.points.loc[self.showing.bools][[
-                'x', 'y', 'z']].values
-        mask = points[str_axis] > position
-        mask[points[str_axis] > position + thickness] = False
-        return mask
+            points = self.points.loc[self.showing.bools][['x', 'y', 'z']].values
+        return PointCloudFilters.slice(points, position=position, thickness=thickness, axis=axis)
 
     def in_box_2d(self, box, points=None):
-        """
-        Return a boolean mask indicating which points are within the given 2D bounding box (xy plane)
-        """
+        """Return a boolean mask indicating which points are within the given 2D bounding box (xy plane)"""
         if points is None:
             points = self.points.loc[self.showing.bools][['x', 'y']].values
-        keep = points > np.array(box[0])
-        keep[points > np.array(box[1])] = False
-        return keep.all(axis=1)
+        return SpatialQueries.in_box_2d(box, points)
 
-    @ staticmethod
+    @staticmethod
     def make_box_from_point(point, delta):
-        """
-        Make a square bounding box with center at the given point and side lengths 2*delta
-        """
-        point = np.array(point)
-        return [point - delta, point + delta]
+        """Make a square bounding box with center at the given point and side lengths 2*delta"""
+        return SpatialQueries.make_box_from_point(point, delta)
+
 
     def get_points_within(self, delta, point=None, return_mask=False, return_z=False, proportion=1.0):
         """
@@ -767,57 +730,26 @@ class PointCloud:
             return points.loc[keep][['x', 'y']].values
 
     def distance_to_line(self, line, point):
-        """
-        Calculate the distance between a given point and a given line
-        :param line: (x1, y1), (x2, y2)
-        :param point: (x, y)
-        """
-        p1, p2 = line
-        dx, dy = p2[0] - p1[0], p2[1] - p1[1]
-        if not dx and not dy:
-            return np.sqrt(np.square(point[0] - p1[0]) + np.square(point[1] - p1[1]))
-        num = np.abs(dy * point[0] - dx * point[1] +
-                     p2[0] * p1[1] - p2[1] * p1[0])
-        den = np.sqrt(np.square(dx) + np.square(dy))
-        return num / den
+        """Calculate the distance between a given point and a given line"""
+        return SpatialQueries.distance_to_line(line, point)
 
     def get_points_near_line(self, line, delta=0.01):
-        """
-        Return a boolean mask indicating which points are within delta of the given line
-        :param line: (x1, y1), (x2, y2)
-        """
-        keep = np.zeros(len(self.points), dtype=bool)
-        for i, p in self.points:
-            if self.distance_to_line(line, p) < delta:
-                keep[i] = True
-        return np.arange(len(self.points))[keep]
+        """Return indices of points within delta of the given line"""
+        pts = self.points[['x', 'y']].values
+        dists = np.array([SpatialQueries.distance_to_line(line, p) for p in pts])
+        return np.where(dists < delta)[0]
 
     def rounding_filter(self, points=None, round=0.02):
-        """
-        This function rounds the point locations to the nearest "round" (default is 2 cm)
-        :return: Unique set of rounded points
-        """
+        """Round point locations to nearest round_val and return unique coordinates."""
         if points is None:
-            points = self.points.loc[self.showing.bools][[
-                'x', 'y', 'z']].values
-        return np.unique(np.round(points / round, decimals=0) * round)
+            points = self.points.loc[self.showing.bools][['x', 'y', 'z']].values
+        return PointCloudFilters.rounding_filter(points, round_val=round)
 
     def radial_filter(self, points=None, threshold=10, radius=0.05):
-        """
-        This filter checks that each point has at least threshold neighboring points within the given radius.
-        A boolean mask is returned indicating which points passed through the filter.
-        """
+        """Verify each point has at least threshold neighbors within radius."""
         if points is None:
-            points = self.points.loc[self.showing.bools][[
-                'x', 'y', 'z']].values
-        query = knn.Query()
-        query.pptk(points)
-        keep = np.ones(len(points), dtype=bool)
-        for i, p in enumerate(tqdm(points, desc='Finding neighbors and filtering')):
-            neighbors = query.neighbors(p, k=threshold, radius=radius)
-            if len(neighbors) < threshold:
-                keep[i] = False
-        return keep
+            points = self.points.loc[self.showing.bools][['x', 'y', 'z']].values
+        return PointCloudFilters.radial_filter(points, threshold=threshold, radius=radius)
 
     def move(self, init, last):
         self.points.loc[self.points['class'] == init, ['class']] = last
@@ -837,9 +769,6 @@ class PointCloud:
     def neighbors(self, k=100, highlight=True):
         """
         Find the centroid of the currently highlighted points and return a Mask indicating which points are neighbors.
-        :param k: Number of neighbors to find.
-        :param highlight: If True, then set the currently highlighted points to the neareest k neighbors. Default True.
-        :return: Return a copy of the mask indicating which points are neighbors of the selected point(s).
         """
         mask = self.select(showing=False, highlighted=True)
         if not mask.count() or mask.count() == len(self.points):
@@ -864,34 +793,13 @@ class PointCloud:
         return mask
 
     def plane_filter(self, points=None, mesh=0.06, axis=2):
-        """
-        This filter returns the number of counts of points in each slice of the point cloud segmented in
-        the given dimension (axis).
-        :param points: Set of points to run the method on. By default, run the method on all currently rendered points.
-        :param mesh: Mesh size for dividing the point cloud along the given axis.
-        :param axis: Axis choice should be 0, 1, or 2 for x, y, and z respectively.
-        :return: List of per-point scores or counts indicating how many points share the plane with a given point.
-        """
+        """Return point count density per slice along axis."""
         if points is None:
-            points = self.points.loc[self.showing.bools][[
-                'x', 'y', 'z']].values
-
-        mesh = np.ones(3) * mesh
-        if axis == 0:
-            mesh[[1, 2]] = 10000000.0
-        elif axis == 1:
-            mesh[[0, 2]] = 10000000.0
-        elif axis == 2:
-            mesh[[0, 1]] = 10000000.0
-
-        vg = VoxelGrid(points, mesh)
-        return np.array([vg.counts(vg.index(p)) for p in points])
+            points = self.points.loc[self.showing.bools][['x', 'y', 'z']].values
+        return PointCloudFilters.plane_filter(points, mesh=mesh, axis=axis)
 
     def color_groups(self, groups, store=False, render=True):
-        """
-        Given a list of lists of indices, color all the points in a given group one random color. If store=True, then
-        store the coloring scheme in the user_data array.
-        """
+        """Given a list of lists of indices, color all the points in a given group one random color."""
         labels = np.zeros(len(self.points), dtype=int)
         if not len(groups):
             return []
@@ -911,46 +819,19 @@ class PointCloud:
             return labels
 
     def regularize(self, points=None, mesh=0.02):
-        """
-        Regularize the density of the given points using a voxel grid of given mesh size. Simply removes all points
-        except one per voxel, so if mesh=0.01, then only 1 point per cubic centimeter will be kept, and all others
-        will be thrown away. The first point found in the voxel is kept.
-        """
+        """Downsample point cloud to 1 point per voxel grid of mesh size."""
         if points is None:
-            points = self.points.loc[self.showing.bools][[
-                'x', 'y', 'z']].values
-        vg = VoxelGrid(points, mesh_size=mesh)
-        keep = np.zeros(len(points), dtype=bool)
-        for indices in vg.indices():
-            keep[indices[0]] = True
-        return keep
+            points = self.points.loc[self.showing.bools][['x', 'y', 'z']].values
+        return PointCloudFilters.regularize(points, mesh=mesh)
 
     def get_points_in_bounds(self, bounds, points=None, extra=0.0):
-        """
-        This function returns a boolean mask indicating which points are contained in the given bounds.
-        If extra is non-zero, then the extra amount will be added to the x and y dimensions of the bounds in order
-        to grab points slightly inside or outside the boundary.
-        """
+        """Return a boolean mask indicating which points are contained in bounds."""
         if points is None:
-            points = self.points.loc[self.showing.bools][[
-                'x', 'y', 'z']].values
-        keep_min = (bounds[0][:2] - extra < points[:, :2]).all(axis=1)
-        keep_max = (bounds[1][:2] + extra > points[:, :2]).all(axis=1)
-        keep = keep_min
-        keep[keep_max == False] = False
-        return keep
+            points = self.points.loc[self.showing.bools][['x', 'y', 'z']].values
+        return SpatialQueries.get_points_in_bounds(bounds, points, extra=extra)
 
     def auto_align_bound_box_method(self, tolerance=0.1, max_points=10000, thickness=0.2):
-        """
-        Automatically align the point cloud with the x and y axes. This method incrementally rotates the point
-        cloud and finds its bounding box, then shrinks the bounding box to see how many points become excluded.
-        If the point cloud represents a rectangular prism, then when the walls are aligned with the x,y axes, many
-        points will fall outside the shrunken bounding box. If the walls are not aligned, then only the corners will
-        fall outside of the shrunken bounding box.
-        :param tolerance: Align the point cloud to within this tolerance (in degrees)
-        :param max_points: Only consider up to max_points points to speed up the calculation
-        :param thickness: Thickness of the bounding shell to use
-        """
+        """Incrementally rotates point cloud to minimize bounding box exterior points."""
         points = self.points[['x', 'y']].values
         if max_points < len(points):
             subsample = np.random.choice(len(points), max_points)
@@ -972,124 +853,66 @@ class PointCloud:
         return best_angle
 
     def auto_align_hough_line_method(self, tolerance=0.1, max_points=100000):
-        """
-        Automatically align the point cloud with the x and y axes. This function uses a Hough transform to find the
-        most dominant line in the point cloud and aligns that line with the nearest axis.
-        :param tolerance: Align the point cloud to within the given tolerance (in degrees)
-        :param max_points: Only consider at most max_points points to speed up computation
-        """
+        """Align point cloud with x and y axes using Hough line detection."""
         points = self.points[['x', 'y']].values
         if max_points < len(points):
             subsample = np.random.choice(len(points), max_points)
             points = points[subsample]
-        # Perform a rough alignment to calculate alignment +/- 5 degrees
-        votes, _, tolerance, center = self.hough_lines(
-            points, theta_precision=5.0, angle_range=90)
-        angle = np.degrees(list(votes.keys())[np.argmax(
-            list(votes.values()))][1] * tolerance + center)
-        # Perform a fine alignment given the results of the rough alignment
-        votes, _, tolerance, center = self.hough_lines(
-            points, theta_precision=tolerance, angle_range=5, theta_center=angle)
-        angle = np.degrees(list(votes.keys())[np.argmax(
-            list(votes.values()))][1] * tolerance + center)
+        votes, _, tol, center = self.hough_lines(points, theta_precision=5.0, angle_range=90)
+        angle = np.degrees(list(votes.keys())[np.argmax(list(votes.values()))][1] * tol + center)
+        votes, _, tol, center = self.hough_lines(points, theta_precision=tol, angle_range=5, theta_center=angle)
+        angle = np.degrees(list(votes.keys())[np.argmax(list(votes.values()))][1] * tol + center)
         print('rotating', angle, 'degrees')
         self.points[['x', 'y']] = self.rotate(degrees=angle)
         self.render(showing=True)
 
-    @ staticmethod
+    @staticmethod
     def hough_lines(points, theta_precision=0.5, angle_range=90, rho_precision=0.02, theta_center=0.0):
-        """
-        This function implements a hough transform for finding lines. The function takes in the representative points,
-        converts them to discretized (rho, theta) points and votes into an accumulator called "votes" which is
-        returned from the function. The key in "votes" belonging to the largest value represents the most predominant
-        line. The key is a discretized (rho, theta), so the actual values are rho * rho_precision and
-        theta * theta_precision + theta_center. Only the angles in range(-angle_range, angle_range) will be considered.
-        Theta_precision and theta_center are in radians.
-        """
-        theta_precision, angle_range, theta_center = np.radians(
-            theta_precision), np.radians(angle_range), np.radians(theta_center)
-        n_steps = int(angle_range / theta_precision)
-        theta_idx = [i for i in range(-n_steps, n_steps+1)]
-        thetas = np.array(
-            [idx * theta_precision + theta_center for idx in theta_idx])
-        cosines = np.array([np.cos(theta) for theta in thetas])
-        tangents = np.array([np.tan(theta) for theta in thetas])
-
-        # Cast a vote for each line that this point passes through in the given range and precision
-        def vote(point):
-            # min_distance = b / sqrt(m^2 + 1) = (y - tan(theta) * x) * cos(theta)
-            rhos = np.array((point[1] - tangents * point[0])
-                            * cosines / rho_precision, dtype=int)
-            for rho, idx in zip(rhos, theta_idx):
-                votes[(rho, idx)] += 1
-
-        votes = defaultdict(int)
-        for point in tqdm(points, desc='Finding lines'):
-            vote(point)
-
-        return votes, rho_precision, theta_precision, theta_center
+        """Hough line transform on 2D coordinates."""
+        return PointCloudFilters.hough_lines(
+            points, theta_precision=theta_precision, angle_range=angle_range,
+            rho_precision=rho_precision, theta_center=theta_center
+        )
 
     def hough_circles(self, points, radius=0.05, resolution=0.010):
-        """
-        This function finds circles of a given radius in the point cloud. It only looks for circles lying in
-        xy-planes in the data (no vertical circles).
-        """
-        # Discretize the points
+        """Hough circle detection in xy-planes."""
         points = (points[:, :2] / resolution).astype(int)
-        # Define a circle to go around each point
         angles = [np.radians(theta) for theta in range(0, 360)]
-        displacements = radius * \
-            np.array([np.array((np.cos(theta), np.sin(theta)))
-                     for theta in angles])
-        # Discretize the circle and only count each discrete location once
-        displacements = np.unique(
-            (displacements / resolution).astype(int), axis=0)
-        # For each point, make a vote for each circle that this point could belong to
+        displacements = radius * np.array([np.array((np.cos(theta), np.sin(theta))) for theta in angles])
+        displacements = np.unique((displacements / resolution).astype(int), axis=0)
         votes = defaultdict(int)
         for point in points:
             for d in displacements:
                 votes[tuple(point + d)] += 1
-        # In order to get the circle center, find the key corresponding to high voted bin and multiply by resolution
         return votes, radius, resolution
 
     def hough_squares(self, points, length=0.1, resolution=0.010):
-        """
-        This function finds squares of a given radius in the point cloud. It only looks for squares lying in
-        xy-planes in the data (no vertical squares).
-        """
-        # Discretize the points
+        """Hough square detection in xy-planes."""
         points = (points[:, :2] / resolution).astype(int)
-        # Define a square to go around each point
         n = int(length / resolution / 2.)
         displacements = [np.array((x, n)) for x in range(-n, n+1)]
         displacements += [np.array((x, -n)) for x in range(-n, n+1)]
         displacements += [np.array((n, y)) for y in range(-n+1, n)]
         displacements += [np.array((-n, y)) for y in range(-n+1, n)]
-        # For each point, make a vote for each square that this point could belong to
         votes = defaultdict(int)
         for point in points:
             for d in displacements:
                 votes[tuple(point + d)] += 1
-        # In order to get the square center, find the key corresponding to high voted bin and multiply by resolution
         return votes, length, resolution
 
     def hough_intersections(self, points, resolution=0.01):
-        """
-        This function finds the location of two intersecting, non-parallel lines in the point cloud.
-        """
+        """Find location of intersecting lines in xy coordinates."""
         votes, rho_precision, theta_precision, theta_center = self.hough_lines(
             points, theta_precision=0.1, rho_precision=resolution)
         n = 100
         best = np.argsort(list(votes.values()))[-n:]
         best_keys = np.array(list(votes.keys()))[best]
-        dists, angles = best_keys[:, 0] * \
-            rho_precision, best_keys[:, 1] * theta_precision + theta_center
+        dists, angles = best_keys[:, 0] * rho_precision, best_keys[:, 1] * theta_precision + theta_center
         values = np.array(list(votes.values()))[best]
         best_pair, best_score = None, 0
         for i in range(len(best)):
             for j in range(i, len(best)):
-                score = (values[i] + values[j]) * \
-                    abs(np.sin(angles[i] - angles[j]))
+                score = (values[i] + values[j]) * abs(np.sin(angles[i] - angles[j]))
                 if score > best_score:
                     best_score = score
                     best_pair = (i, j)
@@ -1104,50 +927,26 @@ class PointCloud:
         return X, Y
 
     def rotate(self, points=None, degrees=0.0, axes=['x', 'y']):
-        """
-        This function takes in a list of points (or uses the currently rendered points) and returns a set of points that
-        have been rotated by 'degrees' degrees about the given axis. By default, axis=2, so the points will rotate
-        about the z-axis.
-        """
+        """Rotate coordinates around the z axis by degrees."""
         if points is None:
             points = self.points.loc[self.showing.bools][axes].values
-
-        t = np.radians(degrees)
-        rot = np.array(((np.cos(t), -np.sin(t)), (np.sin(t), np.cos(t))))
-        return np.dot(points, rot)
+        return PointCloudTransforms.rotate(points, degrees=degrees)
 
     def normals(self, points=None, k=100, r=0.35, render=False):
-        """
-        This function takes in a set of points (or uses the currently rendered points) and calculates the surface
-        normals using pptk built-in functions which use PCA method. The number of neighbors (k) or the distance
-        scale (r) can be changed to affect the resolution of the computation. If render=True, then the results
-        will be rendered upon completion.
-        """
+        """Surface normals using PCA."""
         if points is None:
-            points = self.points.loc[self.showing.bools][[
-                'x', 'y', 'z']].values
-
-        n = np.abs(pptk.estimate_normals(points, k, r))
+            points = self.points.loc[self.showing.bools][['x', 'y', 'z']].values
+        n = PointCloudFilters.estimate_normals(points, k=k, r=r)
         if render and self.viewer_is_ready():
             self.viewer.attributes(n)
-
         return n
 
     def curvature(self, points=None, k=100, r=0.35):
-        """
-        This function takes in a set of points (or uses the currently rendered points) and calculates the surface
-        curvature using pptk built-in functions which use PCA method. The number of neighbors (k) or the distance
-        scale (r) can be changed to affect the resolution of the computation. If render=True, then the results
-        will be rendered upon completion.
-        """
+        """Surface curvature using PCA eigenvalues."""
         if points is None:
-            points = self.points.loc[self.showing.bools][[
-                'x', 'y', 'z']].values
+            points = self.points.loc[self.showing.bools][['x', 'y', 'z']].values
+        return PointCloudFilters.estimate_curvature(points, k=k, r=r)
 
-        eigens = np.abs(pptk.estimate_normals(
-            points, k, r, output_eigenvalues=True)[0])
-        eigens.sort(axis=1)
-        return eigens[:, 0] / eigens.sum(axis=1) * 3.0
 
     # ------------------ AI Assisted Tools (Experimental) ------------------
     def ai_auto_ground(self, distance_threshold=0.25):
