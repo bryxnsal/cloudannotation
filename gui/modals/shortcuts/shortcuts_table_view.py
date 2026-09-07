@@ -1,16 +1,21 @@
 """
-ShortcutsTableView: Table listing point classes, label IDs and assigned key shortcuts.
+ShortcutsTableView: Table listing point classes or actions, identifiers and assigned key shortcuts.
+Supports single-click focus, double-click modal assignment, and quick inline keypress assignment.
 """
 from tkinter import ttk
+from gui.modals.shortcuts.shortcuts_capture_dialog import event_to_combo
 
 class ShortcutsTableView(ttk.Frame):
     """
-    Treeview table for displaying and selecting class shortcuts.
+    Treeview table for displaying and selecting shortcuts.
     """
-    COLUMNS = ("class_name", "label_id", "shortcut")
+    COLUMNS = ("item_name", "item_id", "shortcut")
 
-    def __init__(self, parent, on_double_click=None, on_quick_key=None, **kwargs):
+    def __init__(self, parent, col1_header="Class Name", col2_header="Label ID",
+                 on_double_click=None, on_quick_key=None, **kwargs):
         super().__init__(parent, style='Modern.TFrame', **kwargs)
+        self.col1_header = col1_header
+        self.col2_header = col2_header
         self.on_double_click = on_double_click
         self.on_quick_key = on_quick_key
         self.rows_data = []
@@ -30,12 +35,12 @@ class ShortcutsTableView(ttk.Frame):
             yscrollcommand=scroll.set
         )
 
-        self.tree.heading("class_name", text="Class Name")
-        self.tree.heading("label_id", text="Label ID")
-        self.tree.heading("shortcut", text="Assigned Key Shortcut")
+        self.tree.heading("item_name", text=self.col1_header)
+        self.tree.heading("item_id", text=self.col2_header)
+        self.tree.heading("shortcut", text="Assigned Shortcut")
 
-        self.tree.column("class_name", width=220, anchor='w')
-        self.tree.column("label_id", width=90, anchor='center')
+        self.tree.column("item_name", width=220, anchor='w')
+        self.tree.column("item_id", width=90, anchor='center')
         self.tree.column("shortcut", width=170, anchor='center')
 
         self.tree.pack(fill='both', expand=True)
@@ -61,39 +66,38 @@ class ShortcutsTableView(ttk.Frame):
 
         if self.on_quick_key:
             def _on_tree_key(event):
-                # If Up/Down/Prior/Next, let standard navigation happen
-                if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Prior', 'Next', 'Home', 'End'):
+                # Standard navigation
+                if event.keysym in ('Up', 'Down', 'Prior', 'Next', 'Home', 'End'):
                     return
-                # If Escape
-                if event.keysym == 'Escape':
+
+                # Escape alone clears the shortcut
+                if event.keysym == 'Escape' and not (event.state & 0x4 or event.state & 0x1 or event.state & 0x8):
                     self.on_quick_key('escape')
                     return "break"
-                # If alphanumeric or keypad
-                char = event.char
-                if not char:
-                    if event.keysym.startswith('KP_') and len(event.keysym) == 4 and event.keysym[3].isdigit():
-                        char = event.keysym[3]
-                if char and char.isalnum() and len(char) == 1:
-                    self.on_quick_key(char.lower())
+
+                combo = event_to_combo(event)
+                if combo:
+                    self.on_quick_key(combo)
                     return "break"
+
             self.tree.bind("<Key>", _on_tree_key)
 
-    def populate(self, class_items, selected_index=None):
+    def populate(self, items, selected_index=None):
         """
-        Populate table with list of tuples: (class_name, label_id, assigned_key)
+        Populate table with list of tuples: (item_name, item_id, assigned_shortcut)
         """
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        self.rows_data = list(class_items)
+        self.rows_data = list(items)
 
-        for idx, (c_name, l_id, key) in enumerate(self.rows_data):
+        for idx, (name, i_id, key) in enumerate(self.rows_data):
             key_display = "[ {} ]".format(key.upper()) if key else "- None -"
             self.tree.insert(
                 "",
                 "end",
                 iid=str(idx),
-                values=(c_name, l_id, key_display)
+                values=(name, i_id, key_display)
             )
 
         if self.rows_data:
@@ -115,7 +119,7 @@ class ShortcutsTableView(ttk.Frame):
             return None
 
     def get_selected_item(self):
-        """Return (class_name, label_id, key) for selected row."""
+        """Return (item_name, item_id, key) for selected row."""
         sel = self.tree.selection()
         if not sel:
             return None

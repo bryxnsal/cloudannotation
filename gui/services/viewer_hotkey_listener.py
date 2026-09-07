@@ -1,19 +1,20 @@
 """
-ViewerHotkeyListener: Background keyboard listener that captures classification shortcuts
-when the user is interacting inside the 3D viewer window (PPTK or Open3D) or the main GUI window.
+ViewerHotkeyListener: Background keyboard listener that captures classification shortcuts,
+Ctrl+Z / Ctrl+Y (Undo/Redo), and custom action shortcuts directly while interacting
+inside 3D viewer windows (PPTK or Open3D) or the main CloudAnnotation GUI window.
 
-Context-Aware:
-- Only triggers when the active window is PPTK, Open3D, or the CloudAnnotation GUI.
-- Respects PPTK's native camera views (1-9):
-  If 1-9 is pressed without point selection, PPTK rotates the camera.
-  If 1-9 is pressed WITH point selection, or if letters (q, w, e...) / Numpad keys are pressed,
-  classification is executed immediately.
+Supports:
+- Single keys: e.g. '1', 'q', 'w'
+- Key combinations: e.g. 'ctrl+z', 'ctrl+shift+a', 'alt+s'
+- Context filtering: ignores keystrokes when working in browser/terminal/external apps.
+- PPTK safety: single digits 1-9 rotate camera if no points are selected.
 """
 import os
 import sys
 import subprocess
 import threading
 from typing import Callable, Optional
+from gui.services.shortcut_manager import normalize_combo_string
 
 try:
     from pynput import keyboard
@@ -24,15 +25,18 @@ except ImportError:
 
 class ViewerHotkeyListener:
     """
-    Listens globally for keyboard shortcuts and filters them based on the active X11 window.
+    Listens globally for keystrokes and modifier combinations, filtering by focused X11 window.
     """
-    def __init__(self, pc, shortcut_manager, on_trigger: Callable[[str, str], None], root=None):
+    def __init__(self, pc, shortcut_manager, on_class_trigger: Callable[[str, str], None],
+                 on_action_trigger: Optional[Callable[[str, str], None]] = None, root=None):
         self.pc = pc
         self.shortcut_manager = shortcut_manager
-        self.on_trigger = on_trigger
+        self.on_class_trigger = on_class_trigger
+        self.on_action_trigger = on_action_trigger
         self.root = root  # Tkinter root for thread-safe dispatching
         self._listener = None
         self._running = False
+        self._active_modifiers = set()
         self._lock = threading.Lock()
 
     def start(self):
@@ -42,7 +46,10 @@ class ViewerHotkeyListener:
 
         self._running = True
         try:
-            self._listener = keyboard.Listener(on_press=self._on_press)
+            self._listener = keyboard.Listener(
+                on_press=self._on_press,
+                on_release=self._on_release
+            )
             self._listener.daemon = True
             self._listener.start()
         except Exception as e:
@@ -131,8 +138,12 @@ class ViewerHotkeyListener:
         return False
 
     def _normalize_key(self, key) -> Optional[str]:
-        """Convert pynput Key / KeyCode into standard character string."""
+        """Extract base key name from pynput event."""
         if hasattr(key, 'char') and key.char is not None:
+            # When Ctrl is held, key.char may be control characters (e.g. \x1a for Ctrl+Z)
+            code = ord(key.char)
+            if 1 <= code <= 26:
+                return chr(code + ord('a') - 1)
             return key.char.lower()
 
         key_str = str(key)
@@ -146,44 +157,91 @@ class ViewerHotkeyListener:
                 if 96 <= vk <= 105:
                     return str(vk - 96)
 
+        # Standard keys like 'esc', 'space', etc.
+        if hasattr(key, 'name'):
+            return key.name.lower()
+
         return None
 
+    def _on_release(self, key):
+        """Track modifier releases."""
+        with self._lock:
+            if key in (keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
+                self._active_modifiers.discard('ctrl')
+            elif key in (keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r):
+                self._active_modifiers.discard('shift')
+            elif key in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r):
+                self._active_modifiers.discard('alt')
+
     def _on_press(self, key):
-        """Callback invoked when a key is pressed anywhere on the system."""
+        """Callback invoked when any key is pressed."""
+        # Track modifier presses
+        with self._lock:
+            if key in (keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
+                self._active_modifiers.add('ctrl')
+                return
+            elif key in (keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r):
+                self._active_modifiers.add('shift')
+                return
+            elif key in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r):
+                self._active_modifiers.add('alt')
+                return
+
         if not self.shortcut_manager or not self.shortcut_manager.enabled:
             return
 
-        char_key = self._normalize_key(key)
-        if not char_key:
+        base_key = self._normalize_key(key)
+        if not base_key:
             return
 
-        class_name = self.shortcut_manager.get_class_for_key(char_key)
-        if not class_name:
-            return
+        with self._lock:
+            mods = sorted(list(self._active_modifiers))
 
-        # Check if the currently focused window belongs to CloudAnnotation
+        if mods:
+            combo = "+".join(mods) + "+" + base_key
+        else:
+            combo = base_key
+
+        combo = normalize_combo_string(combo)
+
+        # Check if window belongs to CloudAnnotation or Viewers
         if not self._is_cloudannotation_window_focused():
             return
 
-        # Check PPTK conflict rule:
-        # If active window is PPTK and key is 1-9:
-        # If there are NO selected points, let PPTK handle it (camera view).
-        # If there ARE selected points, or if key is not a digit (e.g. letters q, w, e), classify immediately!
-        is_pptk = (getattr(self.pc, 'viewer_type', 'pptk') == 'pptk')
-        has_sel = self.pc.has_selection() if self.pc else False
+        # 1. Check if combo matches an ACTION shortcut (e.g. undo 'ctrl+z', redo 'ctrl+y', 'render_all', etc.)
+        action_id = self.shortcut_manager.get_action_for_key(combo)
+        if action_id and self.on_action_trigger:
+            def dispatch_action():
+                try:
+                    self.on_action_trigger(action_id, combo)
+                except Exception as e:
+                    print("Error executing action hotkey dispatch:", e)
 
-        if is_pptk and char_key.isdigit() and char_key != '0' and not has_sel:
-            # Let PPTK rotate camera view without intercepting as classification
+            if self.root:
+                self.root.after_idle(dispatch_action)
+            else:
+                threading.Thread(target=dispatch_action, daemon=True).start()
             return
 
-        # Dispatch execution safely to Tkinter event loop
-        def dispatch():
-            try:
-                self.on_trigger(class_name, char_key)
-            except Exception as e:
-                print("Error executing hotkey dispatch:", e)
+        # 2. Check if combo matches a CLASSIFICATION shortcut
+        class_name = self.shortcut_manager.get_class_for_key(combo)
+        if class_name and self.on_class_trigger:
+            # Check PPTK conflict rule:
+            # If active window is PPTK and single digit 1-9:
+            # If NO points selected, let PPTK rotate camera view.
+            is_pptk = (getattr(self.pc, 'viewer_type', 'pptk') == 'pptk')
+            has_sel = self.pc.has_selection() if self.pc else False
 
-        if self.root:
-            self.root.after_idle(dispatch)
-        else:
-            threading.Thread(target=dispatch, daemon=True).start()
+            if is_pptk and combo.isdigit() and combo != '0' and not has_sel:
+                return
+
+            def dispatch_class():
+                try:
+                    self.on_class_trigger(class_name, combo)
+                except Exception as e:
+                    print("Error executing classification hotkey dispatch:", e)
+
+            if self.root:
+                self.root.after_idle(dispatch_class)
+            else:
+                threading.Thread(target=dispatch_class, daemon=True).start()

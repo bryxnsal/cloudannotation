@@ -1,5 +1,7 @@
 """
 ShortcutsDialog: Modal configuration window for editing, resetting, and disabling shortcuts.
+Features tabbed interface for Classification shortcuts and Application Action shortcuts (All, Select, Open PLY, etc.)
+with multi-key combinations (Ctrl+Z, Ctrl+Shift+S, etc.) and inline click+press reassignments.
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -7,30 +9,38 @@ import Config
 from gui.theme import COLORS
 from gui.modals.shortcuts.shortcuts_table_view import ShortcutsTableView
 from gui.modals.shortcuts.shortcuts_capture_dialog import ShortcutsCaptureDialog
+from gui.services.shortcut_manager import ACTION_DEFINITIONS, normalize_combo_string
+
 
 class ShortcutsDialog(tk.Toplevel):
     """
-    Dialog to customize, disable, reset and test point classification shortcuts.
+    Dialog to customize, disable, reset and test point classification and action shortcuts.
     """
     def __init__(self, parent, shortcut_manager, on_applied_callback=None):
         super().__init__(parent)
         self.shortcut_manager = shortcut_manager
         self.on_applied_callback = on_applied_callback
 
-        # In-memory working copy
-        self.working_mapping = dict(shortcut_manager.key_to_class) # {key: class_name}
+        # Working copies
+        self.working_classes = dict(shortcut_manager.key_to_class) # {combo: class_name}
+        self.working_actions = dict(shortcut_manager.action_shortcuts) # {action_id: combo}
         self.enabled_var = tk.BooleanVar(self, value=shortcut_manager.enabled)
 
-        self.title("Keyboard Shortcuts - Point Cloud Classification")
-        self.geometry("620x520")
-        self.minsize(560, 420)
+        self.title("Keyboard Shortcuts Configuration")
+        self.geometry("680x560")
+        self.minsize(600, 460)
         self.configure(bg=COLORS['bg_primary'])
 
-        self.transient(parent)
-        self.grab_set()
-
         self._setup_ui()
-        self.refresh_table()
+        self.refresh_all_tables()
+
+        self.transient(parent)
+        self.update_idletasks()
+        try:
+            self.grab_set()
+        except Exception:
+            pass
+        self.focus_force()
 
     def _setup_ui(self):
         # 1. Header Frame
@@ -39,7 +49,7 @@ class ShortcutsDialog(tk.Toplevel):
 
         title_lbl = ttk.Label(
             header_frame,
-            text="Classification Shortcuts Configuration",
+            text="Shortcuts & Key Combinations Configuration",
             style='Title.TLabel',
             font=('Segoe UI', 11, 'bold')
         )
@@ -57,22 +67,41 @@ class ShortcutsDialog(tk.Toplevel):
         # Subtitle hint
         hint_lbl = ttk.Label(
             self,
-            text="Single-click a row & press any key (0-9, A-Z) to assign instantly, or 'Esc' to unassign.\nDouble-click or click 'Assign Key' to open modal. Shortcuts work directly in 3D viewers.",
+            text="Single-click a row & press any key/combo (e.g. Q, 1, Ctrl+Z, Ctrl+Shift+A) to assign, or 'Esc' to unassign.\nDouble-click opens capture popup. All shortcuts function directly inside 3D Viewers (PPTK / Open3D) and GUI.",
             style='Modern.TLabel',
             font=('Segoe UI', 9)
         )
         hint_lbl.pack(anchor='w', padx=12, pady=(0, 6))
 
-        # 2. Table
-        table_container = ttk.Frame(self, style='Modern.TFrame')
-        table_container.pack(fill='both', expand=True, padx=12, pady=4)
+        # 2. Notebook Tabs: [Point Classes] and [Application Actions]
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill='both', expand=True, padx=12, pady=4)
 
-        self.table_view = ShortcutsTableView(
-            table_container,
-            on_double_click=self.assign_key_action,
-            on_quick_key=self.quick_assign_key_action
+        # Tab 1: Point Classes
+        tab_classes = ttk.Frame(self.notebook, style='Modern.TFrame')
+        self.notebook.add(tab_classes, text=" Point Classes ")
+
+        self.classes_table = ShortcutsTableView(
+            tab_classes,
+            col1_header="Class Name",
+            col2_header="Label ID",
+            on_double_click=self.assign_class_key_action,
+            on_quick_key=self.quick_assign_class_key
         )
-        self.table_view.pack(fill='both', expand=True)
+        self.classes_table.pack(fill='both', expand=True, padx=4, pady=4)
+
+        # Tab 2: Application Actions (All, Select, Undo, Open PLY, etc.)
+        tab_actions = ttk.Frame(self.notebook, style='Modern.TFrame')
+        self.notebook.add(tab_actions, text=" Application Actions ")
+
+        self.actions_table = ShortcutsTableView(
+            tab_actions,
+            col1_header="Action / Button",
+            col2_header="Action ID",
+            on_double_click=self.assign_action_key_action,
+            on_quick_key=self.quick_assign_action_key
+        )
+        self.actions_table.pack(fill='both', expand=True, padx=4, pady=4)
 
         # 3. Middle Toolbar: Edit actions
         mid_bar = ttk.Frame(self, style='Modern.TFrame')
@@ -80,15 +109,15 @@ class ShortcutsDialog(tk.Toplevel):
 
         ttk.Button(
             mid_bar,
-            text="Assign Key",
+            text="Assign Shortcut",
             style='Accent.TButton',
-            command=self.assign_key_action
+            command=self.on_assign_button_clicked
         ).pack(side='left', padx=(0, 4))
 
         ttk.Button(
             mid_bar,
-            text="Clear Selected Key",
-            command=self.clear_key_action
+            text="Clear Selected Shortcut",
+            command=self.on_clear_button_clicked
         ).pack(side='left', padx=(0, 4))
 
         ttk.Button(
@@ -120,118 +149,200 @@ class ShortcutsDialog(tk.Toplevel):
             command=self.destroy
         ).pack(side='right')
 
-    def refresh_table(self, preserve_selection=True):
-        """Build items list from Config.labels and current working_mapping."""
-        selected_idx = self.table_view.get_selected_index() if preserve_selection else None
-        class_to_key = {c: k for k, c in self.working_mapping.items()}
-        items = []
+    def refresh_all_tables(self, preserve_selection=True):
+        """Refresh both Classes and Actions tables."""
+        # Refresh Classes Table
+        sel_class_idx = self.classes_table.get_selected_index() if preserve_selection else None
+        class_to_key = {c: k for k, c in self.working_classes.items()}
+        class_items = []
         for class_name, label_id in Config.labels.items():
             key = class_to_key.get(class_name, None)
-            items.append((class_name, label_id, key))
-        self.table_view.populate(items, selected_index=selected_idx)
+            class_items.append((class_name, label_id, key))
+        self.classes_table.populate(class_items, selected_index=sel_class_idx)
 
-    def quick_assign_key_action(self, key):
-        """Immediately assign or unassign key for the currently focused row."""
-        selected = self.table_view.get_selected_item()
+        # Refresh Actions Table
+        sel_act_idx = self.actions_table.get_selected_index() if preserve_selection else None
+        action_items = []
+        for act_id, act_title, _ in ACTION_DEFINITIONS:
+            key = self.working_actions.get(act_id, None)
+            action_items.append((act_title, act_id, key))
+        self.actions_table.populate(action_items, selected_index=sel_act_idx)
+
+    # ------------------ Class Shortcuts Handling ------------------
+    def quick_assign_class_key(self, combo):
+        selected = self.classes_table.get_selected_item()
         if not selected:
             return
+        class_name = selected[0]
 
-        class_name, _, current_key = selected
-
-        # If user pressed Escape, unassign the shortcut
-        if key == 'escape':
-            for k in list(self.working_mapping.keys()):
-                if self.working_mapping[k] == class_name:
-                    del self.working_mapping[k]
-            self.refresh_table(preserve_selection=True)
+        if combo == 'escape':
+            for k in list(self.working_classes.keys()):
+                if self.working_classes[k] == class_name:
+                    del self.working_classes[k]
+            self.refresh_all_tables(preserve_selection=True)
             return
 
-        # If key is already assigned to another class, remove it from that class
-        for k in list(self.working_mapping.keys()):
-            if k == key:
-                del self.working_mapping[k]
+        # Check conflict with actions
+        for act_id, k in list(self.working_actions.items()):
+            if k == combo:
+                del self.working_actions[act_id]
 
         # Remove previous key for this class
-        for k in list(self.working_mapping.keys()):
-            if self.working_mapping[k] == class_name:
-                del self.working_mapping[k]
+        for k in list(self.working_classes.keys()):
+            if self.working_classes[k] == class_name or k == combo:
+                del self.working_classes[k]
 
-        # Assign new key
-        self.working_mapping[key] = class_name
-        self.refresh_table(preserve_selection=True)
+        self.working_classes[combo] = class_name
+        self.refresh_all_tables(preserve_selection=True)
 
-    def assign_key_action(self):
-        """Open capture popup to assign new key to selected row."""
-        selected = self.table_view.get_selected_item()
+    def assign_class_key_action(self):
+        selected = self.classes_table.get_selected_item()
         if not selected:
-            messagebox.showwarning("Selection Required", "Please select a class from the list first.", parent=self)
+            messagebox.showwarning("Selection Required", "Please select a class row first.", parent=self)
             return
-
         class_name, _, current_key = selected
-        dlg = ShortcutsCaptureDialog(self, class_name, current_key, self.working_mapping)
+
+        # Combined conflict mapping
+        existing_mapping = dict(self.working_classes)
+        for act_id, k in self.working_actions.items():
+            if k:
+                existing_mapping[k] = "Action: " + act_id
+
+        dlg = ShortcutsCaptureDialog(self, class_name, current_key, existing_mapping, item_type="Class")
         self.wait_window(dlg)
 
         if dlg.result_key is not None:
             new_key = dlg.result_key
-            # Remove previous key for this class
-            for k in list(self.working_mapping.keys()):
-                if self.working_mapping[k] == class_name:
-                    del self.working_mapping[k]
+            for k in list(self.working_classes.keys()):
+                if self.working_classes[k] == class_name:
+                    del self.working_classes[k]
+            if new_key:
+                # Remove if assigned to action
+                for act_id, k in list(self.working_actions.items()):
+                    if k == new_key:
+                        del self.working_actions[act_id]
+                self.working_classes[new_key] = class_name
+            self.refresh_all_tables(preserve_selection=True)
 
-            if new_key:  # Not empty string
-                # If key was assigned to another class, remove it first
-                if new_key in self.working_mapping:
-                    del self.working_mapping[new_key]
-                self.working_mapping[new_key] = class_name
-
-            self.refresh_table(preserve_selection=True)
-
-    def clear_key_action(self):
-        """Clear key assigned to selected class."""
-        selected = self.table_view.get_selected_item()
+    # ------------------ Action Shortcuts Handling ------------------
+    def quick_assign_action_key(self, combo):
+        selected = self.actions_table.get_selected_item()
         if not selected:
             return
-        class_name = selected[0]
-        for k in list(self.working_mapping.keys()):
-            if self.working_mapping[k] == class_name:
-                del self.working_mapping[k]
-        self.refresh_table(preserve_selection=True)
+        action_id = selected[1]
+
+        if combo == 'escape':
+            self.working_actions[action_id] = None
+            self.refresh_all_tables(preserve_selection=True)
+            return
+
+        # Remove from other actions
+        for a_id, k in list(self.working_actions.items()):
+            if k == combo:
+                self.working_actions[a_id] = None
+
+        # Remove from classes
+        for k in list(self.working_classes.keys()):
+            if k == combo:
+                del self.working_classes[k]
+
+        self.working_actions[action_id] = combo
+        self.refresh_all_tables(preserve_selection=True)
+
+    def assign_action_key_action(self):
+        selected = self.actions_table.get_selected_item()
+        if not selected:
+            messagebox.showwarning("Selection Required", "Please select an action row first.", parent=self)
+            return
+        action_title, action_id, current_key = selected
+
+        # Combined conflict mapping
+        existing_mapping = dict(self.working_classes)
+        for a_id, k in self.working_actions.items():
+            if k:
+                existing_mapping[k] = "Action: " + a_id
+
+        dlg = ShortcutsCaptureDialog(self, action_title, current_key, existing_mapping, item_type="Action")
+        self.wait_window(dlg)
+
+        if dlg.result_key is not None:
+            new_key = dlg.result_key
+            if not new_key:
+                self.working_actions[action_id] = None
+            else:
+                # Remove from other actions or classes
+                for a_id, k in list(self.working_actions.items()):
+                    if k == new_key:
+                        self.working_actions[a_id] = None
+                for k in list(self.working_classes.keys()):
+                    if k == new_key:
+                        del self.working_classes[k]
+                self.working_actions[action_id] = new_key
+            self.refresh_all_tables(preserve_selection=True)
+
+    # ------------------ Toolbar Button Handlers ------------------
+    def on_assign_button_clicked(self):
+        active_tab = self.notebook.index(self.notebook.select())
+        if active_tab == 0:
+            self.assign_class_key_action()
+        else:
+            self.assign_action_key_action()
+
+    def on_clear_button_clicked(self):
+        active_tab = self.notebook.index(self.notebook.select())
+        if active_tab == 0:
+            selected = self.classes_table.get_selected_item()
+            if selected:
+                class_name = selected[0]
+                for k in list(self.working_classes.keys()):
+                    if self.working_classes[k] == class_name:
+                        del self.working_classes[k]
+        else:
+            selected = self.actions_table.get_selected_item()
+            if selected:
+                action_id = selected[1]
+                self.working_actions[action_id] = None
+        self.refresh_all_tables(preserve_selection=True)
 
     def disable_all_shortcuts_action(self):
-        """Clear all shortcuts and uncheck Enable checkbox."""
         confirm = messagebox.askyesno(
             "Disable All Shortcuts",
-            "Are you sure you want to disable and clear all key shortcuts?\n"
+            "Are you sure you want to disable all shortcuts?\n"
             "You can always restore them with 'Reset Defaults'.",
             parent=self
         )
         if confirm:
-            self.working_mapping.clear()
+            self.working_classes.clear()
+            for k in self.working_actions:
+                self.working_actions[k] = None
             self.enabled_var.set(False)
-            self.refresh_table()
+            self.refresh_all_tables()
 
     def reset_defaults_action(self):
-        """Reset working mapping to factory defaults."""
         confirm = messagebox.askyesno(
             "Reset Defaults",
-            "Reset all shortcuts to default layout (1-9, 0, and Q-O)?",
+            "Reset all classification shortcuts to default layout (1-9, 0, Q-O) and actions?",
             parent=self
         )
         if confirm:
-            self.working_mapping = self.shortcut_manager.get_default_mapping()
+            self.working_classes = self.shortcut_manager.get_default_classification_mapping()
+            self.working_actions = self.shortcut_manager.get_default_action_shortcuts()
             self.enabled_var.set(True)
-            self.refresh_table()
+            self.refresh_all_tables()
 
     def save_and_apply_action(self):
-        """Save to file and notify app to re-bind."""
         is_enabled = self.enabled_var.get()
-        self.shortcut_manager.set_mapping(self.working_mapping, enabled=is_enabled)
+        self.shortcut_manager.set_mapping(
+            new_key_to_class=self.working_classes,
+            new_action_shortcuts=self.working_actions,
+            enabled=is_enabled
+        )
         if self.on_applied_callback:
             self.on_applied_callback()
 
         messagebox.showinfo(
             "Shortcuts Applied",
-            "Shortcuts have been saved and applied successfully.",
+            "All shortcuts have been saved and applied successfully.",
             parent=self
         )
         self.destroy()

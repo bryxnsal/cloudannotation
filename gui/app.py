@@ -42,17 +42,14 @@ class ModernAnnotationGUI:
         # Initialize Shortcut Manager
         self.shortcut_manager = ShortcutManager()
 
-        # Global Keyboard Shortcuts inside GUI window
-        self.root.bind('<Control-z>', lambda e: self.undo_action())
-        self.root.bind('<Control-Z>', lambda e: self.undo_action())
-        self.root.bind('<Control-y>', lambda e: self.redo_action())
-        self.root.bind('<Control-Y>', lambda e: self.redo_action())
+        # Global Keyboard Shortcuts inside GUI window (handled unified via ShortcutManager and ViewerHotkeyListener)
 
         # Initialize 3D Viewer / Global Hotkey Listener
         self.viewer_hotkey_listener = ViewerHotkeyListener(
             pc=self.pc,
             shortcut_manager=self.shortcut_manager,
-            on_trigger=self.on_shortcut_triggered,
+            on_class_trigger=self.on_shortcut_triggered,
+            on_action_trigger=self.on_action_triggered,
             root=self.root
         )
         self.viewer_hotkey_listener.start()
@@ -169,9 +166,13 @@ class ModernAnnotationGUI:
     # ------------------ Shortcuts Handling ------------------
     def apply_shortcuts(self):
         """Bind active shortcuts to root window and refresh UI labels."""
-        self.shortcut_manager.apply_bindings(self.root, self.on_shortcut_triggered)
+        self.shortcut_manager.apply_bindings(
+            self.root,
+            on_classification_callback=self.on_shortcut_triggered,
+            on_action_callback=self.on_action_triggered
+        )
         if hasattr(self, 'classification_view'):
-            count = len(self.shortcut_manager.key_to_class)
+            count = len(self.shortcut_manager.key_to_class) + len(self.shortcut_manager.action_shortcuts)
             if self.shortcut_manager.enabled and count > 0:
                 self.classification_view.shortcuts_btn.configure(text="Shortcuts ({})".format(count))
             else:
@@ -179,8 +180,55 @@ class ModernAnnotationGUI:
             # Refresh combobox entries with [Key] prefix
             self.classification_view.refresh_combobox_items()
 
+    def on_action_triggered(self, action_id, combo_pressed):
+        """Invoked when a global action shortcut is triggered (from viewer or GUI)."""
+        self.log_message("Action shortcut [{}]: {}".format(combo_pressed.upper(), action_id), "INFO")
+
+        if action_id == 'undo':
+            self.undo_action()
+        elif action_id == 'redo':
+            self.redo_action()
+        elif action_id == 'render_all':
+            if hasattr(self, 'rendering_view'):
+                self.rendering_view.render_all()
+        elif action_id == 'toggle_select':
+            if hasattr(self, 'rendering_view'):
+                self.rendering_view.toggle_selection_mode()
+        elif action_id == 'select_inv':
+            if hasattr(self, 'rendering_view'):
+                self.rendering_view.render_selection_inv()
+        elif action_id == 'multi_render':
+            if hasattr(self, 'rendering_view'):
+                self.rendering_view.render_selected_labels()
+        elif action_id == 'select_all_labels':
+            if hasattr(self, 'rendering_view'):
+                self.rendering_view.select_all_labels()
+        elif action_id == 'clear_selections':
+            if hasattr(self, 'rendering_view'):
+                self.rendering_view.clear_label_selections()
+        elif action_id == 'open_ply':
+            self.open_ply_dialog()
+        elif action_id == 'save_advance':
+            if hasattr(self, 'storage_io_view'):
+                self.storage_io_view.save_progress()
+        elif action_id == 'export_result':
+            if hasattr(self, 'storage_io_view'):
+                self.storage_io_view.export_result()
+        elif action_id == 'advances_list':
+            self.open_advances_modal()
+        elif action_id == 'toggle_logs':
+            if hasattr(self, 'status_bar_view'):
+                self.status_bar_view.toggle_logs()
+        elif action_id == 'toggle_overwrite':
+            if hasattr(self, 'classification_view'):
+                current = self.classification_view.overwrite_var.get()
+                self.classification_view.overwrite_var.set(not current)
+                self.log_message("Overwrite toggled: {}".format(not current), "INFO")
+        elif action_id == 'open_shortcuts':
+            self.open_shortcuts_modal()
+
     def on_shortcut_triggered(self, class_name, key_pressed):
-        """Invoked when a registered shortcut key is pressed."""
+        """Invoked when a registered classification shortcut key is pressed."""
         if not hasattr(self, 'classification_view'):
             return
 
