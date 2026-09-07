@@ -111,14 +111,10 @@ class PptkViewerAdapter:
 
         # 3. Restore camera perspective
         if cam_persp is not None and preserve_camera and self.camera_controller:
-            total_pts = len(points_df)
-            if num_points < total_pts and num_points > 0:
-                adjusted = self.camera_controller.compute_anchor_perspective(cam_persp, xyz.to_numpy())
-                self.camera_controller.set_perspective(adjusted)
-            else:
-                self.camera_controller.set_perspective(cam_persp)
+            self.camera_controller.set_perspective(cam_persp)
 
         return True
+
 
     def get_selected_indices(self):
         """Return indices currently selected via Ctrl+Click in the viewer."""

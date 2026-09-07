@@ -282,14 +282,8 @@ class PointCloud:
         self.update_attributes()
 
         if cam_persp is not None and preserve_camera:
-            total_pts = len(self.points)
-            num_rendered = int(np.sum(mask[:]))
-            if num_rendered < total_pts and num_rendered > 0:
-                rendered_xyz = self.points.loc[mask[:], ['x', 'y', 'z']].to_numpy()
-                adjusted_persp = self.camera_controller.compute_anchor_perspective(cam_persp, rendered_xyz)
-                self.set_perspective(adjusted_persp)
-            else:
-                self.set_perspective(cam_persp)
+            self.set_perspective(cam_persp)
+
 
     def renderClass(self,colores=True, mask=None, indices=None, highlighted=False, showing=False, invert=False):
         """
