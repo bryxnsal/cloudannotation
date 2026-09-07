@@ -81,13 +81,44 @@ class ClassificationView(BaseComponent):
         )
         self.shortcuts_btn.pack(side='right', padx=(6, 0))
 
+    def get_selected_class_name(self):
+        """Extract clean class name without the shortcut prefix."""
+        raw = self.option_var.get()
+        if not raw:
+            return ""
+        if raw.startswith("[") and "]" in raw:
+            return raw.split("]", 1)[1].strip()
+        return raw.strip()
+
+    def refresh_combobox_items(self):
+        """Update combobox entries to display shortcuts e.g. [1] Suelo."""
+        sm = getattr(self.app, 'shortcut_manager', None)
+        current_class = self.get_selected_class_name()
+        display_values = []
+
+        for class_name in Config.labels.keys():
+            if sm and sm.enabled:
+                key = sm.get_key_for_class(class_name)
+                if key:
+                    display_values.append("[{}] {}".format(key.upper(), class_name))
+                else:
+                    display_values.append(class_name)
+            else:
+                display_values.append(class_name)
+
+        self.class_combo['values'] = display_values
+
+        # Restore previous selection in the new format
+        if current_class:
+            self.set_selected_class(current_class)
+
     def execute_selection(self):
         """Classify selected points with active label."""
-        selected_option = self.option_var.get()
+        selected_option = self.get_selected_class_name()
         overwrite = self.overwrite_var.get()
         keep_cam = self.keep_camera_var.get()
 
-        if not selected_option:
+        if not selected_option or selected_option not in Config.labels:
             self.log_message("No classification option selected", "WARNING")
             return
 
@@ -145,9 +176,14 @@ class ClassificationView(BaseComponent):
         )
 
     def set_selected_class(self, class_name):
-        """Set active class in combobox."""
-        if class_name in Config.labels:
-            self.option_var.set(class_name)
+        """Set active class in combobox, matching formatted string if present."""
+        if class_name not in Config.labels:
+            return
+        for val in self.class_combo['values']:
+            if val == class_name or val.endswith("] " + class_name):
+                self.option_var.set(val)
+                return
+        self.option_var.set(class_name)
 
     def open_shortcuts_modal(self):
         """Open the shortcuts configuration dialog."""

@@ -149,15 +149,16 @@ class ModernAnnotationGUI:
 
     # ------------------ Shortcuts Handling ------------------
     def apply_shortcuts(self):
-        """Bind active shortcuts to root window."""
+        """Bind active shortcuts to root window and refresh UI labels."""
         self.shortcut_manager.apply_bindings(self.root, self.on_shortcut_triggered)
-        # Update button text in classification view if present
         if hasattr(self, 'classification_view'):
             count = len(self.shortcut_manager.key_to_class)
             if self.shortcut_manager.enabled and count > 0:
                 self.classification_view.shortcuts_btn.configure(text="⚙ Shortcuts ({})".format(count))
             else:
                 self.classification_view.shortcuts_btn.configure(text="⚙ Shortcuts (Off)")
+            # Refresh combobox entries with [Key] prefix
+            self.classification_view.refresh_combobox_items()
 
     def on_shortcut_triggered(self, class_name, key_pressed):
         """Invoked when a registered shortcut key is pressed."""
