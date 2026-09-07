@@ -27,6 +27,13 @@ class StorageIoView(BaseComponent):
 
         ttk.Button(
             row1,
+            text="Open PLY",
+            style='Accent.TButton',
+            command=self.open_ply_file
+        ).pack(side='left', padx=(0, 4), fill='x', expand=True)
+
+        ttk.Button(
+            row1,
             text="Save Advance",
             command=self.save_progress
         ).pack(side='left', padx=(0, 4), fill='x', expand=True)
@@ -35,7 +42,7 @@ class StorageIoView(BaseComponent):
             row1,
             text="Export Result",
             command=self.export_result
-        ).pack(side='right', padx=(4, 0), fill='x', expand=True)
+        ).pack(side='right', fill='x', expand=True)
 
         row2 = ttk.Frame(section_frame, style='Modern.TFrame')
         row2.pack(fill='x')
@@ -45,6 +52,10 @@ class StorageIoView(BaseComponent):
             text="Advances List",
             command=self.open_advances_modal
         ).pack(fill='x', expand=True)
+
+    def open_ply_file(self):
+        """Prompt file dialog to open and load any PLY point cloud."""
+        self.app.open_ply_dialog()
 
     def save_progress(self):
         """Save current progress as a new advance."""

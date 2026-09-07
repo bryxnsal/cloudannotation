@@ -6,7 +6,7 @@ assembles domain components, and manages async execution & graceful exit.
 import os
 import threading
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog
 from gui.theme import COLORS, apply_theme
 from gui.components.cloud_info_view import CloudInfoView
 from gui.components.classification_view import ClassificationView
@@ -198,6 +198,33 @@ class ModernAnnotationGUI:
         self.update_cloud_info()
         import datetime
         self.log_message("Loaded point cloud: {}".format(datetime.datetime.now().strftime('%H:%M:%S')), "SUCCESS")
+
+    def open_ply_dialog(self):
+        """Open a file dialog to select and load any PLY point cloud file."""
+        initial_dir = os.path.dirname(self.pc.filename) if self.pc and self.pc.filename else os.getcwd()
+        filepath = filedialog.askopenfilename(
+            parent=self.root,
+            title="Open PLY Point Cloud",
+            initialdir=initial_dir,
+            filetypes=[("PLY Point Cloud", "*.ply"), ("All Files", "*.*")]
+        )
+        if not filepath:
+            return
+
+        def task():
+            self.pc.reload_from_file(filepath, preserve_camera=False, is_new_base=True)
+            return filepath
+
+        def on_done(loaded_path):
+            self.on_cloud_reloaded(loaded_path)
+            self.log_message("Opened point cloud: {}".format(os.path.basename(loaded_path)), "SUCCESS")
+
+        self.run_async(
+            task,
+            start_msg="Loading point cloud '{}'...".format(os.path.basename(filepath)),
+            success_msg="Point cloud loaded successfully",
+            on_success=on_done
+        )
 
     def run(self):
         """Start the Tkinter main event loop."""

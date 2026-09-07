@@ -474,6 +474,22 @@ class PointCloud:
             self.viewer.close()
         self.viewer = None
 
+    def set_point_size(self, size):
+        """
+        Dynamically update point display size in memory and in active pptk viewer.
+        """
+        try:
+            val = float(size)
+            if val <= 0:
+                return False
+            self.point_size = val
+            if self.viewer_is_ready():
+                self.viewer.set(point_size=self.point_size)
+            return True
+        except Exception as e:
+            print("Error updating point size:", e)
+            return False
+
     def update_attributes(self):
         """
         Refresh attributes (colors, classes, user_data, intensity) of currently rendered points
@@ -768,6 +784,7 @@ class PointCloud:
         self.redo_stack.clear()
 
         if is_new_base or self.base_classes is None:
+            self.filename = filepath
             if 'class' in self.points.columns:
                 self.base_classes = self.points['class'].to_numpy(copy=True)
 

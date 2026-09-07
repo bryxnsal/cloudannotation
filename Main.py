@@ -9,7 +9,7 @@ from tkinter import messagebox
 import Config
 
 parser = argparse.ArgumentParser()
-parser.add_argument("folder", type=str, help="Input folder/file")
+parser.add_argument("folder", type=str, nargs='?', default=None, help="Input folder/file (optional, can be opened from GUI)")
 parser.add_argument("--r", action="store_true")
 parser.add_argument("--name", type=str, required=False, help="Resource filename")
 
@@ -25,39 +25,46 @@ parser.set_defaults(render=True, r=False, labels=14)
 opt = parser.parse_args()
 
 resource_filename = ""
+opt_file = None
+points = 0
 
-is_folder = os.path.isdir(opt.folder)
+if opt.folder:
+    is_folder = os.path.isdir(opt.folder)
 
-if is_folder:
-    opt_file = os.path.join(opt.folder, "map", "GlobalMap.ply")
-    advances_folder = os.path.join(opt.folder, "map", "advances")
-    if opt.r:
-        print("\nRecovery mode was set:")
-        if opt.name == None:
-            list_of_files = glob.glob(advances_folder + "/*.ply")
-            if len(list_of_files) == 0:
-                print("You dont have any advance file")
-                sys.exit()
+    if is_folder:
+        opt_file = os.path.join(opt.folder, "map", "GlobalMap.ply")
+        advances_folder = os.path.join(opt.folder, "map", "advances")
+        if opt.r:
+            print("\nRecovery mode was set:")
+            if opt.name == None:
+                list_of_files = glob.glob(advances_folder + "/*.ply")
+                if len(list_of_files) == 0:
+                    print("You dont have any advance file")
+                    sys.exit()
+                else:
+                    resource_filename = max(list_of_files, key=os.path.getctime)
+                    print("Openning last advance file: " + resource_filename)
+
             else:
-                resource_filename = max(list_of_files, key=os.path.getctime)
-                print("Openning last advance file: " + resource_filename)
-
+                if isfile(advances_folder + opt.name):
+                    resource_filename = advances_folder + opt.name
+                    print("Openning advance file: " + resource_filename)
+                else:
+                    print("Advance file does not exist")
+                    sys.exit()
         else:
-            if isfile(advances_folder + opt.name):
-                resource_filename = advances_folder + opt.name
-                print("Openning advance file: " + resource_filename)
-            else:
-                print("Advance file does not exist")
-                sys.exit()
+            print("\n Openning original file")
     else:
-        print("\n Openning original file")
-else:
-    opt_file = opt.folder
+        opt_file = opt.folder
 
-p = PlyData.read(opt_file)
-points = p.elements[0].count
-print("\nPoints: " + str(points))
-print("Labels: " + str(len(Config.labels)))
+    if os.path.isfile(opt_file):
+        p = PlyData.read(opt_file)
+        points = p.elements[0].count
+        print("\nPoints: " + str(points))
+    print("Labels: " + str(len(Config.labels)))
+else:
+    print("\nNo PLY file specified at launch. Use the 'Open PLY' button in the GUI to load a point cloud.")
+    print("Labels: " + str(len(Config.labels)))
 
 if __name__ == "__main__":
     """
