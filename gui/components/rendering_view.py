@@ -98,6 +98,7 @@ class RenderingView(BaseComponent):
         self.label_listbox = tk.Listbox(
             list_frame,
             selectmode=tk.MULTIPLE,
+            exportselection=False,
             height=4,
             bg=self.colors['bg_accent'],
             fg=self.colors['text_primary'],
