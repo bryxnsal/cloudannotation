@@ -24,36 +24,7 @@ class RenderingView(BaseComponent):
         )
         section_frame.pack(fill='x')
 
-        # Button row: All, Select, Select Inv, Multi
-        button_row = ttk.Frame(section_frame, style='Modern.TFrame')
-        button_row.pack(fill='x', pady=(0, 6))
-
-        ttk.Button(
-            button_row,
-            text="All",
-            command=self.render_all
-        ).pack(side='left', padx=(0, 2), fill='x', expand=True)
-
-        self.select_btn = ttk.Button(
-            button_row,
-            text="Select",
-            command=self.toggle_selection_mode
-        )
-        self.select_btn.pack(side='left', padx=(2, 2), fill='x', expand=True)
-
-        ttk.Button(
-            button_row,
-            text="Select Inv",
-            command=self.render_selection_inv
-        ).pack(side='left', padx=(2, 2), fill='x', expand=True)
-
-        ttk.Button(
-            button_row,
-            text="Multi",
-            command=self.render_selected_labels
-        ).pack(side='right', padx=(2, 0), fill='x', expand=True)
-
-        # Dynamic Point Size Slider + Textbox control
+        # Dynamic Point Size Slider + Textbox control (at the top of [RENDER & CAMERA])
         ptsize_row = ttk.Frame(section_frame, style='Modern.TFrame')
         ptsize_row.pack(fill='x', pady=(0, 6))
 
@@ -87,6 +58,35 @@ class RenderingView(BaseComponent):
         self.ptsize_entry.pack(side='right')
         self.ptsize_entry.bind('<Return>', lambda e: self._on_entry_submit())
         self.ptsize_entry.bind('<FocusOut>', lambda e: self._on_entry_submit())
+
+        # Button row: All, Select, Select Inv, Multi
+        button_row = ttk.Frame(section_frame, style='Modern.TFrame')
+        button_row.pack(fill='x', pady=(0, 6))
+
+        ttk.Button(
+            button_row,
+            text="All",
+            command=self.render_all
+        ).pack(side='left', padx=(0, 2), fill='x', expand=True)
+
+        self.select_btn = ttk.Button(
+            button_row,
+            text="Select",
+            command=self.toggle_selection_mode
+        )
+        self.select_btn.pack(side='left', padx=(2, 2), fill='x', expand=True)
+
+        ttk.Button(
+            button_row,
+            text="Select Inv",
+            command=self.render_selection_inv
+        ).pack(side='left', padx=(2, 2), fill='x', expand=True)
+
+        ttk.Button(
+            button_row,
+            text="Multi",
+            command=self.render_selected_labels
+        ).pack(side='right', padx=(2, 0), fill='x', expand=True)
 
         # Listbox with scrollbar for labels
         list_frame = ttk.Frame(section_frame, style='Modern.TFrame')
