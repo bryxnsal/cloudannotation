@@ -50,7 +50,7 @@ class ClassificationView(BaseComponent):
             command=self.execute_selection
         ).pack(side='right')
 
-        # Bottom row: Checkboxes and Undo button
+        # Bottom row: Checkboxes, Shortcuts button, and Undo button
         options_row = ttk.Frame(section_frame, style='Modern.TFrame')
         options_row.pack(fill='x')
 
@@ -72,7 +72,14 @@ class ClassificationView(BaseComponent):
             options_row,
             text="Undo",
             command=self.undo_action
-        ).pack(side='right', padx=(10, 0))
+        ).pack(side='right', padx=(6, 0))
+
+        self.shortcuts_btn = ttk.Button(
+            options_row,
+            text="⚙ Shortcuts",
+            command=self.open_shortcuts_modal
+        )
+        self.shortcuts_btn.pack(side='right', padx=(6, 0))
 
     def execute_selection(self):
         """Classify selected points with active label."""
@@ -136,3 +143,12 @@ class ClassificationView(BaseComponent):
             start_msg="Redoing action...",
             on_success=on_done
         )
+
+    def set_selected_class(self, class_name):
+        """Set active class in combobox."""
+        if class_name in Config.labels:
+            self.option_var.set(class_name)
+
+    def open_shortcuts_modal(self):
+        """Open the shortcuts configuration dialog."""
+        self.app.open_shortcuts_modal()

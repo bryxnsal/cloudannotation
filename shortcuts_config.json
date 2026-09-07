@@ -1,0 +1,24 @@
+{
+  "enabled": true,
+  "shortcuts": {
+    "1": "Suelo",
+    "2": "Vegetaci\u00f3n",
+    "3": "Edificaciones",
+    "4": "Postes BT",
+    "5": "Cables BT",
+    "6": "Postes MT",
+    "7": "Cables MT",
+    "8": "Postes AT",
+    "9": "Cables AT",
+    "q": "Anuncios",
+    "w": "Escombros",
+    "e": "Andamios",
+    "r": "Escaleras",
+    "t": "Ladrillos",
+    "y": "Trabajos el\u00e9ctricos MT",
+    "u": "Cables MT 1",
+    "i": "Cables MT 2",
+    "o": "Cables MT 3",
+    "0": "No clasificado"
+  }
+}

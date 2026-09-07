@@ -15,6 +15,8 @@ from gui.components.ai_tools_view import AiToolsView
 from gui.components.storage_io_view import StorageIoView
 from gui.components.status_bar_view import StatusBarView
 from gui.modals.advances import AdvancesDialog
+from gui.modals.shortcuts import ShortcutsDialog
+from gui.services.shortcut_manager import ShortcutManager
 
 class ModernAnnotationGUI:
     """
@@ -35,6 +37,9 @@ class ModernAnnotationGUI:
         # Apply styles and theme
         self.style = apply_theme(self.root)
 
+        # Initialize Shortcut Manager
+        self.shortcut_manager = ShortcutManager()
+
         # Global Keyboard Shortcuts
         self.root.bind('<Control-z>', lambda e: self.undo_action())
         self.root.bind('<Control-Z>', lambda e: self.undo_action())
@@ -46,6 +51,9 @@ class ModernAnnotationGUI:
 
         # Build UI layout with domain components
         self._create_widgets()
+
+        # Bind classification shortcuts and update button state
+        self.apply_shortcuts()
 
         # Initialize info display & initial log
         self.update_cloud_info()
@@ -139,6 +147,41 @@ class ModernAnnotationGUI:
         t = threading.Thread(target=worker, daemon=True)
         t.start()
 
+    # ------------------ Shortcuts Handling ------------------
+    def apply_shortcuts(self):
+        """Bind active shortcuts to root window."""
+        self.shortcut_manager.apply_bindings(self.root, self.on_shortcut_triggered)
+        # Update button text in classification view if present
+        if hasattr(self, 'classification_view'):
+            count = len(self.shortcut_manager.key_to_class)
+            if self.shortcut_manager.enabled and count > 0:
+                self.classification_view.shortcuts_btn.configure(text="⚙ Shortcuts ({})".format(count))
+            else:
+                self.classification_view.shortcuts_btn.configure(text="⚙ Shortcuts (Off)")
+
+    def on_shortcut_triggered(self, class_name, key_pressed):
+        """Invoked when a registered shortcut key is pressed."""
+        if not hasattr(self, 'classification_view'):
+            return
+
+        # 1. Update combobox selection
+        self.classification_view.set_selected_class(class_name)
+
+        # 2. If points are selected in viewer, execute classification immediately
+        if self.pc and self.pc.has_selection():
+            self.classification_view.execute_selection()
+        else:
+            self.log_message("Shortcut [{}]: Selected '{}' (Use Ctrl+Click to select points, then re-press key)".format(
+                key_pressed.upper(), class_name
+            ), "INFO")
+
+    def open_shortcuts_modal(self):
+        """Open the shortcuts customization dialog."""
+        try:
+            ShortcutsDialog(self.root, self.shortcut_manager, on_applied_callback=self.apply_shortcuts)
+        except Exception as e:
+            self.log_message("Error opening shortcuts modal: {}".format(e), "ERROR")
+
     # ------------------ Modal Launchers ------------------
     def open_advances_modal(self):
         """Open the Advances List modal dialog."""
@@ -158,3 +201,4 @@ class ModernAnnotationGUI:
     def run(self):
         """Start the Tkinter main event loop."""
         self.root.mainloop()
+
