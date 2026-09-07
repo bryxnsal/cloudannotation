@@ -18,6 +18,8 @@ from Voxelize import VoxelGrid
 from plyfile import PlyData, PlyElement
 from core.viewer import CameraController, PptkViewerAdapter
 from core.io import PointCloudIO, PlyIO
+from core.history import UndoRedoManager
+
 
 
 class PointCloud:
@@ -40,9 +42,11 @@ class PointCloud:
         self.saved_cameras = self.camera_controller.saved_cameras
         self.active_roi = None
         self.max_undo_steps = 50
-        self.undo_stack = []
-        self.redo_stack = []
+        self.history_manager = UndoRedoManager(max_steps=self.max_undo_steps)
+        self.undo_stack = self.history_manager.undo_stack
+        self.redo_stack = self.history_manager.redo_stack
         self.base_classes = None
+
         self.full_cloud_lookat = None
         if filename is None:
             self.render_flag = False
@@ -452,8 +456,8 @@ class PointCloud:
         self.points = df
         self.showing = Mask(len(self.points), True)
         self.clear_work_area()
-        self.undo_stack.clear()
-        self.redo_stack.clear()
+        self.history_manager.clear()
+
 
         if is_new_base or self.base_classes is None:
             self.filename = filepath
@@ -595,15 +599,12 @@ class PointCloud:
         modified_indices = np.where(mask.bools)[0]
         if len(modified_indices) > 0:
             old_classes = self.points.loc[modified_indices, 'class'].values.copy()
-            self.undo_stack.append({
-                'indices': modified_indices,
-                'old_classes': old_classes,
-                'new_class': cls,
-                'selection_indices': sel_indices
-            })
-            if len(self.undo_stack) > self.max_undo_steps:
-                self.undo_stack.pop(0)
-            self.redo_stack.clear()
+            self.history_manager.record_action(
+                indices=modified_indices,
+                old_classes=old_classes,
+                new_class=cls,
+                selection_indices=sel_indices
+            )
 
         self.points.loc[mask.bools, 'class'] = cls
         if self.viewer_is_ready():
@@ -618,56 +619,34 @@ class PointCloud:
         """
         Revert the last classification action and restore the active selection in the viewer.
         """
-        if not self.undo_stack:
-            return False, "Nothing to undo"
+        success, message, action = self.history_manager.undo(self.points)
+        if not success:
+            return False, message
 
-        action = self.undo_stack.pop()
-        indices = action['indices']
-        old_classes = action['old_classes']
-
-        current_classes = self.points.loc[indices, 'class'].values.copy()
-        self.redo_stack.append({
-            'indices': indices,
-            'old_classes': current_classes,
-            'new_class': action['new_class'],
-            'selection_indices': action.get('selection_indices', [])
-        })
-
-        self.points.loc[indices, 'class'] = old_classes
         if self.viewer_is_ready():
             self.update_attributes()
             sel_indices = action.get('selection_indices', [])
             if sel_indices is not None and len(sel_indices) > 0:
                 self.viewer.set(selected=sel_indices)
             else:
-                self.highlight(indices=indices)
+                self.highlight(indices=action['indices'])
 
-        return True, f"Undo: Restored {len(indices)} points to previous classes"
+        return True, message
 
     def redo(self):
         """
         Re-apply the last undone action.
         """
-        if not self.redo_stack:
-            return False, "Nothing to redo"
+        success, message, action = self.history_manager.redo(self.points)
+        if not success:
+            return False, message
 
-        action = self.redo_stack.pop()
-        indices = action['indices']
-
-        current_classes = self.points.loc[indices, 'class'].values.copy()
-        self.undo_stack.append({
-            'indices': indices,
-            'old_classes': current_classes,
-            'new_class': action['new_class'],
-            'selection_indices': action.get('selection_indices', [])
-        })
-
-        self.points.loc[indices, 'class'] = action['new_class']
         if self.viewer_is_ready():
             self.update_attributes()
             self.viewer.set(selected=[])
 
-        return True, f"Redo: Re-applied class {action['new_class']} on {len(indices)} points"
+        return True, message
+
 
     def center(self):
         """
