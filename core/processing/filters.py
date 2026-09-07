@@ -109,3 +109,31 @@ class PointCloudFilters:
                 votes[(rho, idx)] += 1
 
         return votes, rho_precision, theta_precision_rad, theta_center_rad
+
+    @staticmethod
+    def auto_align_bound_box(points_xy: np.ndarray, tolerance: float = 0.1, max_points: int = 10000, thickness: float = 0.2):
+        """Find best angle to align 2D points using bounding box method."""
+        from .transforms import PointCloudTransforms
+        from .spatial_queries import SpatialQueries
+        pts = points_xy
+        if max_points < len(pts):
+            pts = pts[np.random.choice(len(pts), max_points)]
+        best_cost, best_angle = np.inf, 0.0
+        for i in range(int(90. / tolerance)):
+            bounds = [pts.min(axis=0) + thickness, pts.max(axis=0) - thickness]
+            cost = SpatialQueries.in_box_2d(bounds, pts).sum()
+            if cost < best_cost:
+                best_cost, best_angle = cost, i * tolerance
+            pts = PointCloudTransforms.rotate(pts, tolerance)
+        return best_angle
+
+    @staticmethod
+    def auto_align_hough_line(points_xy: np.ndarray, tolerance: float = 0.1, max_points: int = 100000):
+        """Find best angle to align 2D points using Hough lines method."""
+        pts = points_xy
+        if max_points < len(pts):
+            pts = pts[np.random.choice(len(pts), max_points)]
+        votes, _, tol, center = PointCloudFilters.hough_lines(pts, theta_precision=5.0, angle_range=90)
+        angle = np.degrees(list(votes.keys())[np.argmax(list(votes.values()))][1] * tol + center)
+        votes, _, tol, center = PointCloudFilters.hough_lines(pts, theta_precision=tol, angle_range=5, theta_center=angle)
+        return np.degrees(list(votes.keys())[np.argmax(list(votes.values()))][1] * tol + center)
