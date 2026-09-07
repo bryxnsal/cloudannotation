@@ -9,9 +9,10 @@ class ShortcutsTableView(ttk.Frame):
     """
     COLUMNS = ("class_name", "label_id", "shortcut")
 
-    def __init__(self, parent, on_double_click=None, **kwargs):
+    def __init__(self, parent, on_double_click=None, on_quick_key=None, **kwargs):
         super().__init__(parent, style='Modern.TFrame', **kwargs)
         self.on_double_click = on_double_click
+        self.on_quick_key = on_quick_key
         self.rows_data = []
 
         self._create_widgets()
@@ -40,6 +41,15 @@ class ShortcutsTableView(ttk.Frame):
         self.tree.pack(fill='both', expand=True)
         scroll.config(command=self.tree.yview)
 
+        # Ensure single click gives keyboard focus to the tree
+        def _on_single_click(e):
+            item = self.tree.identify_row(e.y)
+            if item:
+                self.tree.selection_set(item)
+                self.tree.focus(item)
+
+        self.tree.bind("<Button-1>", _on_single_click)
+
         if self.on_double_click:
             def _on_dbl(e):
                 item = self.tree.identify_row(e.y)
@@ -48,6 +58,25 @@ class ShortcutsTableView(ttk.Frame):
                     self.tree.focus(item)
                 self.on_double_click()
             self.tree.bind("<Double-1>", _on_dbl)
+
+        if self.on_quick_key:
+            def _on_tree_key(event):
+                # If Up/Down/Prior/Next, let standard navigation happen
+                if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Prior', 'Next', 'Home', 'End'):
+                    return
+                # If Escape
+                if event.keysym == 'Escape':
+                    self.on_quick_key('escape')
+                    return "break"
+                # If alphanumeric or keypad
+                char = event.char
+                if not char:
+                    if event.keysym.startswith('KP_') and len(event.keysym) == 4 and event.keysym[3].isdigit():
+                        char = event.keysym[3]
+                if char and char.isalnum() and len(char) == 1:
+                    self.on_quick_key(char.lower())
+                    return "break"
+            self.tree.bind("<Key>", _on_tree_key)
 
     def populate(self, class_items, selected_index=None):
         """

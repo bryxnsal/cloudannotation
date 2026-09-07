@@ -57,7 +57,7 @@ class ShortcutsDialog(tk.Toplevel):
         # Subtitle hint
         hint_lbl = ttk.Label(
             self,
-            text="Double-click a row or click 'Assign Key'. Shortcuts work directly in 3D viewers and GUI.\nNote: In PPTK, keys 1-9 rotate camera if no points are selected, or classify points if selected.",
+            text="Single-click a row & press any key (0-9, A-Z) to assign instantly, or 'Esc' to unassign.\nDouble-click or click 'Assign Key' to open modal. Shortcuts work directly in 3D viewers.",
             style='Modern.TLabel',
             font=('Segoe UI', 9)
         )
@@ -69,7 +69,8 @@ class ShortcutsDialog(tk.Toplevel):
 
         self.table_view = ShortcutsTableView(
             table_container,
-            on_double_click=self.assign_key_action
+            on_double_click=self.assign_key_action,
+            on_quick_key=self.quick_assign_key_action
         )
         self.table_view.pack(fill='both', expand=True)
 
@@ -128,6 +129,36 @@ class ShortcutsDialog(tk.Toplevel):
             key = class_to_key.get(class_name, None)
             items.append((class_name, label_id, key))
         self.table_view.populate(items, selected_index=selected_idx)
+
+    def quick_assign_key_action(self, key):
+        """Immediately assign or unassign key for the currently focused row."""
+        selected = self.table_view.get_selected_item()
+        if not selected:
+            return
+
+        class_name, _, current_key = selected
+
+        # If user pressed Escape, unassign the shortcut
+        if key == 'escape':
+            for k in list(self.working_mapping.keys()):
+                if self.working_mapping[k] == class_name:
+                    del self.working_mapping[k]
+            self.refresh_table(preserve_selection=True)
+            return
+
+        # If key is already assigned to another class, remove it from that class
+        for k in list(self.working_mapping.keys()):
+            if k == key:
+                del self.working_mapping[k]
+
+        # Remove previous key for this class
+        for k in list(self.working_mapping.keys()):
+            if self.working_mapping[k] == class_name:
+                del self.working_mapping[k]
+
+        # Assign new key
+        self.working_mapping[key] = class_name
+        self.refresh_table(preserve_selection=True)
 
     def assign_key_action(self):
         """Open capture popup to assign new key to selected row."""
