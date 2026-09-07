@@ -81,6 +81,30 @@ class PptkViewerAdapter:
             print("Error updating attributes in viewer:", e)
             return False
 
+    def restore_camera_after_geometry_load(self, perspective):
+        """Restore and commit the orbit target after PPTK replaces geometry."""
+        if perspective is None or self.camera_controller is None or self.viewer is None:
+            return False
+
+        if not self.camera_controller.set_perspective(perspective):
+            return False
+
+        try:
+            # PPTK restores its saved camera state when a drag begins. A
+            # one-pose animation commits the restored perspective as that
+            # saved state, including its look-at/orbit target.
+            self.viewer.play(
+                [perspective],
+                ts=[0.0],
+                tlim=[0.0, 0.0],
+                repeat=False,
+                interp='constant',
+            )
+            return True
+        except Exception as e:
+            print("Error committing camera perspective:", e)
+            return False
+
     def render(self, points_df, mask, preserve_camera=True):
         """
         Render selected points into viewer, preserving camera orientation when requested.
@@ -98,7 +122,7 @@ class PptkViewerAdapter:
         if preserve_camera and self.camera_controller and self.is_ready():
             cam_persp = self.camera_controller.get_perspective()
 
-        # 2. Load geometry into pptk
+        # 2. Replace geometry in PPTK.
         xyz = points_df.loc[mask_indices, ['x', 'y', 'z']]
         if self.is_ready():
             self.viewer.clear()
@@ -109,9 +133,11 @@ class PptkViewerAdapter:
         self.viewer.set(point_size=self.point_size, selected=[])
         self.update_attributes(points_df, mask)
 
-        # 3. Restore camera perspective
+        # 3. Restore and commit the camera after the new geometry and its
+        # attributes have been processed. PPTK resets lookat while loading.
         if cam_persp is not None and preserve_camera and self.camera_controller:
-            self.camera_controller.set_perspective(cam_persp)
+            if not self.restore_camera_after_geometry_load(cam_persp):
+                print("Warning: could not restore camera after geometry load")
 
         return True
 
