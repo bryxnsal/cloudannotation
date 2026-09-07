@@ -3,15 +3,15 @@ PptkViewerAdapter: Encapsulates all interactions with the PPTK 3D point cloud vi
 """
 import pptk
 import numpy as np
+from core.viewer.base_viewer import BaseViewerAdapter
 
-class PptkViewerAdapter:
+class PptkViewerAdapter(BaseViewerAdapter):
     """
     Manages the lifecycle, point loading, attribute mapping and interaction with pptk.viewer.
     """
     def __init__(self, camera_controller=None):
+        super().__init__(camera_controller=camera_controller)
         self.viewer = None
-        self.camera_controller = camera_controller
-        self.point_size = 0.01
 
     def is_ready(self):
         """Return True if pptk viewer process is alive and responsive."""

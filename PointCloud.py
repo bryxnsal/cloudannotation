@@ -8,7 +8,7 @@ import pandas as pd
 
 from Mask import Mask
 import knn as knn
-from core.viewer import CameraController, PptkViewerAdapter
+from core.viewer import CameraController, get_open3d_viewer_adapter, get_pptk_viewer_adapter
 from core.io import PointCloudIO, PlyIO
 from core.history import UndoRedoManager
 from core.processing import PointCloudTransforms, SpatialQueries, PointCloudFilters
@@ -21,12 +21,21 @@ class PointCloud:
     Facade class managing point cloud data, user interaction, rendering, and classification.
     Delegates heavy lifting to modular core engines.
     """
-    def __init__(self, filename=None, point_size=0.01, max_points=10000000, render=True, labels=11, r=False, advanceFile=None):
+    def __init__(self, filename=None, point_size=0.01, max_points=10000000, render=True, labels=11, r=False, advanceFile=None, viewer_type='pptk'):
         self.point_size = point_size
         self.max_points = max_points
         self.render_flag = render
-        self.camera_controller = CameraController(lambda: self.viewer_adapter.viewer)
-        self.viewer_adapter = PptkViewerAdapter(self.camera_controller)
+        self.viewer_type = viewer_type.lower() if viewer_type else 'pptk'
+
+        if self.viewer_type == 'open3d':
+            self.camera_controller = None
+            Open3dViewerAdapter = get_open3d_viewer_adapter()
+            self.viewer_adapter = Open3dViewerAdapter()
+        else:
+            PptkViewerAdapter = get_pptk_viewer_adapter()
+            self.camera_controller = CameraController(lambda: getattr(self.viewer_adapter, 'viewer', None))
+            self.viewer_adapter = PptkViewerAdapter(self.camera_controller)
+
         self.viewer_adapter.point_size = self.point_size
         self.resource = r
         self.las_header = None
@@ -36,7 +45,7 @@ class PointCloud:
         self.showing = None
         self.index = None
         self.filename = filename
-        self.saved_cameras = self.camera_controller.saved_cameras
+        self.saved_cameras = self.camera_controller.saved_cameras if self.camera_controller else {}
         self.active_roi = None
         self.max_undo_steps = 50
         self.history_manager = UndoRedoManager(max_steps=self.max_undo_steps)

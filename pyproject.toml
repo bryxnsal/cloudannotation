@@ -1,0 +1,44 @@
+[project]
+name = "cloudannotation"
+version = "0.1.0"
+description = "Herramienta de anotación y visualización 3D de nubes de puntos"
+readme = "README.md"
+requires-python = ">=3.8,<3.9"
+dependencies = [
+    "numpy>=1.19.5,<2.0.0",
+    "pandas>=1.1.5",
+    "plyfile>=0.8",
+    "laspy>=2.0.0",
+    "scipy>=1.5.4",
+    "scikit-learn>=0.24.2",
+    "tqdm>=4.60.0",
+    "annoy>=1.17.0",
+    "matplotlib>=3.3.0",
+    "pyquaternion>=0.9.9",
+    "Pillow>=8.4.0",
+]
+
+[project.optional-dependencies]
+pptk = [
+    "pptk @ https://github.com/ChadLin9596/pptk/releases/download/v0.1.1/pptk-0.1.1-cp38-none-manylinux_2_35_x86_64.whl#sha256=08613f6e12f45d5d2997f949354a96ab5f6deca72352ef771f2634d565817b26",
+]
+open3d = [
+    "open3d==0.19.0",
+]
+all = [
+    "open3d==0.19.0",
+    "pptk @ https://github.com/ChadLin9596/pptk/releases/download/v0.1.1/pptk-0.1.1-cp38-none-manylinux_2_35_x86_64.whl#sha256=08613f6e12f45d5d2997f949354a96ab5f6deca72352ef771f2634d565817b26",
+]
+
+[project.scripts]
+cdann = "Main:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["Main", "PointCloud", "Config", "GUI", "Mask", "Voxelize", "knn"]
+
+[tool.setuptools.packages.find]
+include = ["core*", "gui*", "alg*"]

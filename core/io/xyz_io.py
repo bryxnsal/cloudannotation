@@ -4,7 +4,6 @@ XYZ & PCD I/O Module: Handling ASCII formats (xyz, pts, txt, csv) and Open3D PCD
 import os
 import numpy as np
 import pandas as pd
-import open3d as o3d
 
 class XyzIO:
     """
@@ -42,6 +41,7 @@ class XyzIO:
 
     @staticmethod
     def read_pcd(filename):
+        import open3d as o3d
         cloud = o3d.io.read_point_cloud(filename)
         df = pd.DataFrame(np.asarray(cloud.points), columns=['x', 'y', 'z'])
         if cloud.has_colors():
@@ -54,6 +54,7 @@ class XyzIO:
 
     @staticmethod
     def write_pcd(filename, points_df, labels_count=None):
+        import open3d as o3d
         cloud = o3d.geometry.PointCloud()
         cloud.points = o3d.utility.Vector3dVector(points_df[['x', 'y', 'z']].values)
         if all(col in points_df.columns for col in ['r', 'g', 'b']):
