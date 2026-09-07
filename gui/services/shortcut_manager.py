@@ -30,9 +30,7 @@ class ShortcutManager:
     def get_default_mapping(self):
         """Generate default mapping matching Config.labels."""
         key_map = {}
-        # Order: 1-9 for main classes, 0 for No clasificado, letters for subsequent
         labels_list = list(Config.labels.keys())
-        # Place 'No clasificado' to '0' if present
         unclassified = "No clasificado"
         other_labels = [l for l in labels_list if l != unclassified]
 
@@ -42,7 +40,6 @@ class ShortcutManager:
                 key_map[DEFAULT_KEYS[key_idx]] = label
                 key_idx += 1
             elif key_idx == 9:
-                # 0 is reserved for unclassified if available
                 key_idx += 1
                 key_map[DEFAULT_KEYS[key_idx]] = label
                 key_idx += 1
@@ -120,15 +117,17 @@ class ShortcutManager:
 
     def apply_bindings(self, root, on_shortcut_callback):
         """
-        Dynamically bind/unbind keys on the Tkinter root window.
+        Dynamically bind/unbind keys using bind_all across all window widgets.
+        Operates regardless of which internal widget (e.g. combobox, buttons, frames) has focus,
+        while safely ignoring active text entries (Entry, Text).
         """
         # Unbind previous keys
         for k in list(self.bound_keys):
             try:
-                root.unbind("<Key-{}>".format(k))
-                root.unbind("<Key-{}>".format(k.upper()))
+                root.unbind_all("<Key-{}>".format(k))
+                root.unbind_all("<Key-{}>".format(k.upper()))
                 if k.isdigit():
-                    root.unbind("<KP_{}>".format(k))
+                    root.unbind_all("<KP_{}>".format(k))
             except Exception:
                 pass
         self.bound_keys.clear()
@@ -142,20 +141,33 @@ class ShortcutManager:
 
             def make_handler(c_name=class_name, key_pressed=k_lower):
                 def handler(event):
-                    # Ignore if user is typing in a text entry or combobox
                     widget = event.widget
-                    w_class = widget.winfo_class()
-                    if w_class in ('Entry', 'Text', 'TCombobox'):
-                        return
+                    # Ignore if event comes from a modal/dialog toplevel
+                    try:
+                        if widget.winfo_toplevel() != root:
+                            return
+                    except Exception:
+                        pass
+
+                    # Ignore only when user is typing text into an actual text input (Entry or Text),
+                    # but allow shortcuts when focused on Combobox, Buttons, Canvas, Frames, etc.
+                    try:
+                        w_class = widget.winfo_class()
+                        if w_class in ('Entry', 'TEntry', 'Text'):
+                            return
+                    except Exception:
+                        pass
+
                     on_shortcut_callback(c_name, key_pressed)
+                    return "break"
                 return handler
 
-            # Standard key
-            root.bind("<Key-{}>".format(k_lower), make_handler())
-            root.bind("<Key-{}>".format(k_lower.upper()), make_handler())
+            # Standard keys
+            root.bind_all("<Key-{}>".format(k_lower), make_handler())
+            root.bind_all("<Key-{}>".format(k_lower.upper()), make_handler())
             self.bound_keys.add(k_lower)
 
             # Keypad equivalent if digit
             if k_lower.isdigit():
-                root.bind("<KP_{}>".format(k_lower), make_handler())
+                root.bind_all("<KP_{}>".format(k_lower), make_handler())
                 self.bound_keys.add("KP_{}".format(k_lower))
