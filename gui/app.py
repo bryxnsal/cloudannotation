@@ -157,9 +157,9 @@ class ModernAnnotationGUI:
         if hasattr(self, 'classification_view'):
             count = len(self.shortcut_manager.key_to_class)
             if self.shortcut_manager.enabled and count > 0:
-                self.classification_view.shortcuts_btn.configure(text="⚙ Shortcuts ({})".format(count))
+                self.classification_view.shortcuts_btn.configure(text="Shortcuts ({})".format(count))
             else:
-                self.classification_view.shortcuts_btn.configure(text="⚙ Shortcuts (Off)")
+                self.classification_view.shortcuts_btn.configure(text="Shortcuts (Off)")
             # Refresh combobox entries with [Key] prefix
             self.classification_view.refresh_combobox_items()
 

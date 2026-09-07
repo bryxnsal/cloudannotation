@@ -76,7 +76,7 @@ class ClassificationView(BaseComponent):
 
         self.shortcuts_btn = ttk.Button(
             options_row,
-            text="⚙ Shortcuts",
+            text="Shortcuts",
             command=self.open_shortcuts_modal
         )
         self.shortcuts_btn.pack(side='right', padx=(6, 0))
