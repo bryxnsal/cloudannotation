@@ -18,23 +18,26 @@ cd cloudannotation
 uv tool install ".[pptk]"
 ```
 
-Para reinstalar después de actualizar el repositorio (`git pull`):
+### Opciones de instalación:
+
+Puedes instalar las dependencias según el visor 3D que prefieras utilizar:
+
+| Opción | Comando | Descripción |
+| :--- | :--- | :--- |
+| **Completa (Recomendada)** | `uv tool install --force ".[all]"` | Instala **PPTK** y **Open3D** juntos. Permite alternar entre ambos visores libremente. |
+| **Solo PPTK** | `uv tool install --force ".[pptk]"` | Instala el visor nativo de alto rendimiento PPTK (ideal para Linux x86_64). |
+| **Solo Open3D** | `uv tool install --force ".[open3d]"` | Instala el visor moderno Open3D (ideal si tu plataforma no soporta PPTK). |
+
+> [!NOTE]
+> El wheel de PPTK está fijado por URL y SHA-256 en `pyproject.toml`, garantizando una instalación segura sin descargas de repositorios desconocidos.
+
+### Desinstalar el CLI
+
+Si deseas remover la herramienta y el comando `cdann` de tu sistema:
 
 ```bash
-uv tool install --force ".[pptk]"
+uv tool uninstall cloudannotation
 ```
-
-En plataformas donde PPTK no esté disponible, instala Open3D y activa el
-visor alternativo:
-
-```
-uv tool install --force ".[open3d]"
-cdann ./dataset/Quanergy000 --use-open3d
-```
-
-También puedes instalar ambos visores con `uv tool install --force ".[all]"`.
-El wheel PPTK está fijado por URL y SHA-256 en `pyproject.toml`; no se
-descarga desde mirrors desconocidos.
 
 ## Estructura y Manejo de Archivos
 
@@ -216,21 +219,68 @@ pc.write('road_labeled.ply',overwrite=True)
 ```
 
 
-## Atajos de teclado en la GUI
+## Sistema de Atajos de Teclado (Shortcuts)
 
-La aplicación cuenta con atajos configurables globalmente en la GUI (accesibles con la tecla `F1`):
+Los atajos de teclado funcionan **tanto dentro de la ventana de la GUI como directamente dentro de los visores 3D (PPTK u Open3D)** sin necesidad de alternar el foco con el ratón. Se configuran desde el botón **"Shortcuts"** en la sección `[CLASS]`.
 
-| Atajo | Acción |
-| :--- | :--- |
-| `Ctrl + S` | Guardar avance (`Save Advance`) |
-| `Ctrl + Z` | Deshacer clasificación (`Undo`) |
-| `Ctrl + Y` | Rehacer clasificación (`Redo`) |
-| `Ctrl + O` | Abrir archivo PLY / LAS (`Open PLY`) |
-| `Ctrl + D` | Deseleccionar puntos (`Unselect`) |
-| `Ctrl + I` | Invertir selección activa |
-| `1` .. `9`, `0` | Asignar clase rápida a la selección |
-| `F1` | Abrir modal de Atajos y Personalización |
-| `Espacio` | Re-renderizar / Refrescar vista |
+La configuración personalizada se guarda automáticamente en:
+```bash
+~/.cloudannotation/shortcuts_config.json
+```
+
+### 1. Acciones de la Aplicación (Application Actions)
+
+Permite asignar combinaciones de 1 a 3 teclas (ej. `Ctrl+O`, `Ctrl+Shift+S`, `Alt+A` o teclas individuales). Por diseño, **solo Undo y Redo vienen asignados por defecto** para evitar interferencias; todas las demás acciones inician desasignadas (`None`) para que el usuario las personalice a su gusto:
+
+| Acción | Atajo por defecto | Descripción |
+| :--- | :---: | :--- |
+| **Undo** | `Ctrl + Z` | Deshacer la última acción de clasificación (restaura puntos y selecciones) |
+| **Redo** | `Ctrl + Y` | Rehacer la última acción revertida |
+| **All** | *(Sin asignar)* | Renderizar la nube de puntos completa |
+| **Select** | *(Sin asignar)* | Aislar el área de trabajo seleccionada (ROI) o salir de ella (`Unselect`) |
+| **Select Inv** | *(Sin asignar)* | Invertir selección y aislar los puntos no seleccionados |
+| **Multi** | *(Sin asignar)* | Filtrar y renderizar solo las etiquetas marcadas en la lista |
+| **Select All Labels** | *(Sin asignar)* | Marcar todas las etiquetas de la lista para renderizado multi-etiqueta |
+| **Clear Selections** | *(Sin asignar)* | Desmarcar todas las etiquetas de la lista |
+| **Open PLY** | *(Sin asignar)* | Abrir selector de archivos para cargar una nueva nube PLY/LAS |
+| **Save Advance** | *(Sin asignar)* | Guardar avance incremental en la subcarpeta `advances/` |
+| **Export Result** | *(Sin asignar)* | Exportar nube de puntos clasificada final |
+| **Advances List** | *(Sin asignar)* | Abrir el modal interactivo con el historial de avances |
+| **Logs** | *(Sin asignar)* | Alternar la visibilidad de la consola de registros inferior |
+| **Overwrite** | *(Sin asignar)* | Alternar el checkbox de sobreescritura de etiquetas |
+| **Shortcuts** | *(Sin asignar)* | Abrir el panel modal de configuración de atajos |
+
+### 2. Clases de Puntos (Point Classes)
+
+Asignan directamente una etiqueta de clasificación a los puntos seleccionados (`Ctrl + Clic / Drag` en el visor):
+
+| Tecla por defecto | Clase asignada |
+| :---: | :--- |
+| `0` | No clasificado |
+| `1` | Suelo |
+| `2` | Vegetación |
+| `3` | Edificaciones |
+| `4` | Postes BT |
+| `5` | Cables BT |
+| `6` | Postes MT |
+| `7` | Cables MT |
+| `8` | Postes AT |
+| `9` | Cables AT |
+| `Q` | Anuncios |
+| `W` | Escombros |
+| `E` | Andamios |
+| `R` | Escaleras |
+| `T` | Ladrillos |
+| `Y` | Trabajos eléctricos MT |
+| `U` | Cables MT 1 |
+| `I` | Cables MT 2 |
+| `O` | Cables MT 3 |
+
+> [!TIP]
+> **Edición Rápida de Atajos**:
+> En el modal de **Shortcuts**, haz **un solo clic** sobre cualquier fila y presiona la tecla o combinación deseada para asignarla al instante.
+> Para borrar un atajo y dejarlo sin asignar, selecciónalo y presiona `Esc`.
+> El **doble clic** abre el diálogo de captura interactiva con detector de conflictos.
 
 ---
 
