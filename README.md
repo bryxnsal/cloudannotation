@@ -1,9 +1,19 @@
-# Pointcloud Annotation Tool
+# Pointcloud Annotation Tool (`cdann`)
 
-## Instalacion global con `uv`
+**CloudAnnotation** (`cdann`) es una herramienta interactiva de alto rendimiento para la visualización, inspección, segmentación y etiquetado manual/asistido de nubes de puntos 3D (`.ply`, `.las`, `.pcd`).
 
-El CLI requiere Python 3.8. La instalación recomendada para Linux x86_64 usa
-PPTK y queda disponible globalmente como `cdann`:
+Diseñada para flujos de trabajo de ingeniería, topografía y visión computacional (LiDAR/fotogrametría), ofrece:
+- **Doble soporte de visores 3D**: Visor nativo acelerado **PPTK** y visor moderno **Open3D**.
+- **Etiquetado ágil y atajos directos**: Clasifica puntos seleccionados con un solo clic o atajo de teclado (`1`-`9`, `Q`-`O`, o combinaciones personalizadas de 1 a 3 teclas) tanto desde la GUI como directamente dentro de la ventana 3D.
+- **Historial completo de Undo/Redo**: Deshaz (`Ctrl+Z`) y rehaz (`Ctrl+Y`) acciones de clasificación al instante sin perder selecciones ni orientación de cámara.
+- **Control de cámara y áreas de trabajo**: Preservación permanente de perspectiva, aislamiento de regiones de interés (ROI) con `Select` e inversión de selecciones con `Select Inv`.
+- **Gestor incremental de avances**: Guarda y audita checkpoints de etiquetado en la subcarpeta `advances/` sin alterar el archivo original hasta la exportación final.
+
+---
+
+## Instalación global con `uv`
+
+El CLI requiere Python 3.8. La instalación recomendada instala soporte completo para todos los visores (`.[all]`) y deja el comando `cdann` disponible globalmente en tu terminal:
 
 ```bash
 # 1. Instalar uv (si no lo tienes instalado aún)
@@ -15,7 +25,7 @@ git clone https://github.com/bryxnsal/cloudannotation.git
 cd cloudannotation
 
 # 3. Instalar globalmente el CLI como cdann
-uv tool install ".[pptk]"
+uv tool install ".[all]"
 ```
 
 ### Opciones de instalación:
@@ -30,6 +40,18 @@ Puedes instalar las dependencias según el visor 3D que prefieras utilizar:
 
 > [!NOTE]
 > El wheel de PPTK está fijado por URL y SHA-256 en `pyproject.toml`, garantizando una instalación segura sin descargas de repositorios desconocidos.
+
+### Actualizar el CLI (cuando hay nuevos cambios en el repositorio)
+
+Si ya tienes instalada la herramienta y deseas actualizar a la última versión disponible en GitHub:
+
+```bash
+cd cloudannotation
+git pull
+uv tool install --force ".[all]"
+```
+
+*(Si utilizas solo un visor específico, reemplaza `".[all]"` por `".[pptk]"` o `".[open3d]"`).*
 
 ### Desinstalar el CLI
 
