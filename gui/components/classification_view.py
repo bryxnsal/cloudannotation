@@ -1,6 +1,6 @@
 """
 ClassificationView: Component for [CLASS] section.
-Handles class selection combobox, Overwrite and Keep Camera checkboxes, Execute and Undo actions.
+Handles class selection combobox, Overwrite checkbox, Execute, Undo, and Shortcuts actions.
 """
 import tkinter as tk
 from tkinter import ttk
@@ -17,7 +17,6 @@ class ClassificationView(BaseComponent):
         self.option_var = tk.StringVar(self)
         self.option_var.set("")
         self.overwrite_var = tk.BooleanVar(self, value=False)
-        self.keep_camera_var = tk.BooleanVar(self, value=True)
 
         self._create_widgets()
 
@@ -60,13 +59,6 @@ class ClassificationView(BaseComponent):
             variable=self.overwrite_var,
             style='Modern.TCheckbutton'
         ).pack(side='left', padx=(0, 14))
-
-        ttk.Checkbutton(
-            options_row,
-            text="Keep Camera Position",
-            variable=self.keep_camera_var,
-            style='Modern.TCheckbutton'
-        ).pack(side='left')
 
         ttk.Button(
             options_row,
@@ -116,7 +108,7 @@ class ClassificationView(BaseComponent):
         """Classify selected points with active label."""
         selected_option = self.get_selected_class_name()
         overwrite = self.overwrite_var.get()
-        keep_cam = self.keep_camera_var.get()
+        keep_cam = True
 
         if not selected_option or selected_option not in Config.labels:
             self.log_message("No classification option selected", "WARNING")

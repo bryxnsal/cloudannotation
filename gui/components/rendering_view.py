@@ -132,9 +132,7 @@ class RenderingView(BaseComponent):
         ).pack(side='right', padx=(2, 0), fill='x', expand=True)
 
     def _get_keep_camera(self):
-        """Retrieve keep camera checkbox state from classification view."""
-        if hasattr(self.app, 'classification_view'):
-            return self.app.classification_view.keep_camera_var.get()
+        """Camera orientation is preserved by default across all renders."""
         return True
 
     def render_all(self):
