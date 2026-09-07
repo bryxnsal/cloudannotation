@@ -43,9 +43,12 @@ class TestPointCloudRegression(unittest.TestCase):
     def tearDownClass(cls):
         if os.path.exists(cls.test_ply):
             os.remove(cls.test_ply)
-        for temp_file in ["test_advance.ply", "test_exported.ply"]:
+        for temp_file in ["test_advance.ply", "test_exported.ply", "advances/test_exported.ply"]:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
+        if os.path.exists("advances") and not os.listdir("advances"):
+            os.rmdir("advances")
+
 
     def setUp(self):
         self.pc = PointCloud(self.test_ply, point_size=0.01, render=False, labels=14)
@@ -112,5 +115,19 @@ class TestPointCloudRegression(unittest.TestCase):
         self.assertIn('classes_count', stats)
         self.assertIn('file_size_mb', stats)
 
+    def test_06_save_and_reload(self):
+        """Verify write and reload_from_file roundtrip."""
+        export_file = "test_exported.ply"
+        self.pc.write(export_file, overwrite=True)
+        expected_path = os.path.join("advances", export_file)
+        self.assertTrue(os.path.exists(expected_path))
+
+        # Reload into cloud
+        res = self.pc.reload_from_file(expected_path, preserve_camera=False)
+        self.assertTrue(res)
+        self.assertEqual(len(self.pc), 500)
+
+
 if __name__ == '__main__':
     unittest.main()
+

@@ -16,12 +16,13 @@ from Mask import Mask
 import knn as knn
 from Voxelize import VoxelGrid
 from plyfile import PlyData, PlyElement
-from utils.labelToolPly import writeLabeled
 from core.viewer import CameraController, PptkViewerAdapter
+from core.io import PointCloudIO, PlyIO
 
 
 class PointCloud:
     def __init__(self, filename=None, point_size=0.01, max_points=10000000, render=True, labels=11,r=False,advanceFile=None):
+
         self.point_size = point_size
         self.max_points = max_points
         self.render_flag = render
@@ -63,237 +64,31 @@ class PointCloud:
     def load(self, filename, max_points=None):
         if max_points is not None:
             self.max_points = max_points
-        if filename.endswith('.las') or filename.endswith('.laz'):
-            self.__load_las_file(filename)
-        elif filename.endswith('.ply'):
-            self.__load_ply_file(filename)
-        elif filename.endswith('.pcd'):
-            self.__load_pcd_file(filename)
-        elif filename.endswith('.xyz') or filename.endswith('.pts') or filename.endswith('.txt'):
-            self.__load_xyz_file(filename)
-        else:
-            print('Cannot load %s: file type not supported' % filename)
+        try:
+            new_df, metadata = PointCloudIO.load(
+                filename,
+                max_points=self.max_points,
+                labels_count=self.labels
+            )
+        except ValueError as e:
+            print(f'Cannot load {filename}: {e}')
             return
+
+        if 'las_header' in metadata and metadata['las_header'] is not None:
+            self.las_header = metadata['las_header']
+
+        if hasattr(self, 'points') and self.points is not None and len(self.points) > 0:
+            self.points = pd.concat([self.points, new_df], ignore_index=True, sort=False)
+        else:
+            self.points = new_df
+
         self.showing = Mask(len(self.points), True)
         self.render(self.showing)
 
     def __from_plyfile(self, filename):
-        plydata = PlyData.read(filename)
-        vertex = plydata['vertex'].data
+        """Internal helper maintained for compatibility, delegating to PlyIO."""
+        return PlyIO.read(filename, labels_count=self.labels)
 
-        # Extraer los atributos disponibles
-        data = {name: vertex[name] for name in vertex.dtype.names}
-        df = pd.DataFrame(data)
-
-        # Asegurar columnas esperadas
-        required_cols = ['x', 'y', 'z']
-        for col in required_cols:
-            if col not in df.columns:
-                raise ValueError(f"Missing required column '{col}' in PLY file.")
-
-        # Normalizar colores si existen
-        if 'red' in df.columns and 'green' in df.columns and 'blue' in df.columns:
-            df.rename(columns={'red': 'r', 'green': 'g', 'blue': 'b'}, inplace=True)
-
-        # Procesar clases si existen (asume 0-255 en rojo = clase)
-        if 'class' in df.columns:
-            # Ya viene del archivo, no hay que hacer nada
-            df['class'] = df['class'].astype(int)  # asegurar tipo
-        elif 'r' in df.columns and self.labels is not None:
-            # Normaliza a clase entera si viene flotante
-            if df['r'].max() <= 1.0:
-                df['class'] = np.round(df['r'] * self.labels).astype(int)
-            else:
-                df['class'] = df['r'].astype(int)
-
-            print(f'Check if the array of labels is complete [0-{self.labels}]')
-            print("Else try to modify the labels quantity")
-            print(np.unique(df['class']))
-        else:
-            df['class'] = 0  # valor por defecto
-
-        # Asignar valores derivados si existen
-        if 'g' in df.columns:
-            df['user_data'] = df['g']
-        if 'b' in df.columns:
-            df['intensity'] = df['b']
-
-        # Aplicar reducción si hay límite de puntos
-        # if self.max_points is not None and self.max_points < len(df):
-        # df = df.loc[np.random.choice(df.index, self.max_points, replace=False)]
-
-        return df
-
-    def __from_open3d_point_cloud(self, cloud):
-        new_df = pd.DataFrame(np.asarray(cloud.points),
-                              columns=['x', 'y', 'z'])
-
-        if cloud.has_normals():
-            normals = np.asarray(cloud.normals)
-            new_df['r'] = (normals[:, 0] * 255.).astype(int)
-            new_df['g'] = (normals[:, 1] * 255.).astype(int)
-            new_df['b'] = (normals[:, 2] * 255.).astype(int)
-            print("Cloud with normals")
-        if cloud.has_colors():
-            colors = np.asarray(cloud.colors)
-            if colors[:, 0].max() > 0:
-                new_df['class'] = (
-                    np.round(colors[:, 0]*float(self.labels)).astype(int))
-                print(f'Check if the array of labels is complete [0-{self.labels}]')
-                print("Else try to modify the labels quantity")
-                print(np.unique(new_df['class']))
-            if colors[:, 1].max() > 0:
-                new_df['user_data'] = (colors[:, 1] * 255.).astype(int)
-            if colors[:, 2].max() > 0:
-                new_df['intensity'] = (colors[:, 2] * 255.).astype(int)
-            
-            if colors[:, 0].max() > 0:
-                new_df['r'] = (colors[:, 0] * 255.).astype(int)
-            if colors[:, 1].max() > 0:
-                new_df['g'] = (colors[:, 1] * 255.).astype(int)
-            if colors[:, 2].max() > 0:
-                new_df['b'] = (colors[:, 2] * 255.).astype(int)
-
-
-        if self.max_points is not None and self.max_points < len(new_df):
-            new_df = new_df.loc[np.random.choice(len(new_df), self.max_points)]
-
-        new_df['class'] = np.zeros(len(new_df), dtype=int)
-        
-
-        return new_df
-
-    def __unzip_laz(self, infile, outfile=None):
-        import subprocess
-        if outfile is None:
-            outfile = infile.replace('.laz', '.las')
-        args = ['laszip', '-i', infile, '-o', outfile]
-        subprocess.run(" ".join(args), shell=True, stdout=subprocess.PIPE)
-
-    def __zip_las(self, infile, outfile=None):
-        import subprocess
-        if outfile is None:
-            outfile = infile.replace('.las', '.laz')
-        args = ['laszip', '-i', infile, '-o', outfile]
-        subprocess.run(" ".join(args), shell=True, stdout=subprocess.PIPE)
-
-    def __load_las_file(self, filename):
-        if filename.endswith('.laz'):
-            orig_filename = filename
-            filename = 'TEMPORARY.las'
-            self.__unzip_laz(orig_filename, filename)
-        with File(filename) as f:
-            if self.las_header is None:
-                self.las_header = f.header.copy()
-            if self.max_points is not None and self.max_points < f.header.point_records_count:
-                mask = Mask(f.header.point_records_count, False)
-                mask[np.random.choice(
-                    f.header.point_records_count, self.max_points)] = True
-            else:
-                mask = Mask(f.header.point_records_count, True)
-            new_df = pd.DataFrame(np.array((f.x, f.y, f.z)).T[mask.bools])
-            new_df.columns = ['x', 'y', 'z']
-            if f.header.data_format_id in [2, 3, 5, 7, 8]:
-                rgb = pd.DataFrame(
-                    np.array((f.red, f.green, f.blue), dtype='int').T[mask.bools])
-                rgb.columns = ['r', 'g', 'b']
-                new_df = new_df.join(rgb)
-            new_df['class'] = f.classification[mask.bools]
-            if np.sum(f.user_data):
-                new_df['user_data'] = f.user_data[mask.bools].copy()
-            if np.sum(f.intensity):
-                new_df['intensity'] = f.intensity[mask.bools].copy()
-        self.points = self.points.append(new_df, sort=False)
-        if filename == 'TEMPORARY.las':
-            os.system('rm TEMPORARY.las')
-
-    def __load_ply_file(self, filename):
-        df = self.__from_plyfile(filename)
-        
-        if hasattr(self, 'points') and self.points is not None:
-            self.points = pd.concat([self.points, df], ignore_index=True, sort=False)
-        else:
-            self.points = df
-        
-
-    def __load_xyz_file(self, filename):
-        """
-        This function allows the user to load point cloud data from an ascii text file format (extension xyz,
-        txt, csv, etc.). The text file must have a header as the first line labeling the columns.
-        """
-        with open(filename) as f:
-            # Find out if the delimiter is a comma or a space
-            first_line = f.readline()
-            split_first_line = first_line.split(',')
-            if split_first_line[0] == first_line:
-                split_first_line = first_line.split(' ')
-                # Find out if the delimiter is something other than a comma or space
-                if split_first_line[0] == first_line:
-                    print('Unsupported delimiter')
-                    return
-                delimiter = ' '
-            else:
-                delimiter = ','
-            # Find out if this file has a header as the first line, and if so, grab the names from it
-            has_header = first_line.lower().islower()
-            if has_header:
-                header = 0
-                names = split_first_line
-            else:
-                header = None
-                names = ['x', 'y', 'z', 'class', 'r', 'g', 'b']
-                names = names[:len(split_first_line)]
-            # Find out if the first column of the data is row indices
-            if has_header:
-                has_indices = not len(split_first_line[0])
-            else:
-                has_indices = False
-            # If the first column does represent row indices, remove that column name
-            if has_header and has_indices:
-                names = names[1:]
-
-        # Read the csv-like file
-        if has_indices:
-            new_df = pd.DataFrame.from_csv(filename, sep=delimiter)
-        elif has_header:
-            new_df = pd.read_csv(filename, delimiter=delimiter, header=header)
-        else:
-            new_df = pd.read_csv(
-                filename, delimiter=delimiter, header=header, names=names)
-
-        # Make sure we have x and y point values, and make sure we have z values and class values
-        if 'x' not in new_df or 'y' not in new_df:
-            if 'x' not in new_df or 'y' not in new_df:
-                print('Error:  x and/or y missing from dataset. Please make sure there is x and y data in the point cloud',
-                      'file, and that the file header indicates which columns store which attribute.')
-                # return
-        if 'z' not in new_df:
-            self.points['z'] = np.zeros(len(self.points))
-        
-        new_df.columns = ['x', 'y', 'z']
-        new_df['class'] = np.zeros(len(new_df), dtype=int)
-        self.points = self.points.append(new_df, sort=False)
-
-    def __load_pcd_file(self, filename):
-        points = o3d.io.read_point_cloud(filename)
-        self.points = self.points.append(
-            self.__from_open3d_point_cloud(points), sort=False)
-
-    def __to_open3d_point_cloud(self, df):
-        cloud = o3d.geometry.PointCloud()
-        cloud.points = o3d.utility.Vector3dVector(df[['x', 'y', 'z']].values)
-        if 'r' in df.columns:
-            cloud.normals = o3d.utility.Vector3dVector(
-                df[['r', 'g', 'b']].values / 255.)
-        colors = np.zeros((len(df), 3))
-        colors[:, 0] = df['class'] / float(self.labels)
-        if 'user_data' in df.columns:
-            colors[:, 1] = df['user_data'] / 255.
-        if 'intensity' in df.columns:
-            colors[:, 2] = df['intensity'] / 255.
-        if colors.max() > 0:
-            cloud.colors = o3d.utility.Vector3dVector(colors)
-        return cloud
 
     def writeLabels(self):
         writeLabeled(self.filename, self.points)
@@ -334,118 +129,37 @@ class PointCloud:
         :param highlighted: If True, then write the currently highlighted points to file.
         :param showing: If True, then write all the currently rendered points to file.
         :param overwrite: If True, then overwrite an existing file
-        :param points: Pandas DataFrame containing the points and all the data to write. This DataFrame object must
-        have x, y, and z attributes and optionally can have r, g, b, class, intensity, and user_data attributes.
+        :param points: Pandas DataFrame containing the points and all the data to write.
         """
         if filename is None:
             filename = self.filename
-        if os.path.exists(filename) and not overwrite:
-            print(filename, 'already exists. Use option "overwrite=True" to overwrite')
+        
+        # If relative PLY path and filename doesn't specify a dir, store in advances/
+        target_path = filename
+        if filename.endswith('.ply') and not os.path.dirname(filename) and self.filename:
+            folder = os.path.join(os.path.dirname(self.filename), 'advances')
+            target_path = os.path.join(folder, filename)
+
+        if os.path.exists(target_path) and not overwrite:
+            print(target_path, 'already exists. Use option "overwrite=True" to overwrite')
             return
+
         if mask is None and points is None:
             mask = self.select(indices, highlighted, showing)
         if points is None:
             points = self.points.loc[mask.bools]
-        if filename.endswith('.las'):
-            self.__write_las_file(filename, points)
-        elif filename.endswith('.laz'):
-            self.__write_laz_file(filename, points)
-        elif filename.endswith('.ply'):
-            self.__write_ply_file(filename, points)
-        elif filename.endswith('.pcd'):
-            self.__write_pcd_file(filename, points)
-        elif filename.endswith('.xyz') or filename.endswith('.pts') or filename.endswith('.txt'):
-            self.__write_xyz_file(filename, points)
-        else:
-            print(
-                'Unrecognized file type. Please use .las, .ply, .pcd, .xyz, .pts, or .txt.')
-            return
-        print('Wrote %d points to %s' % (len(points), filename))
 
-    def __write_laz_file(self, filename, points):
-        self.__write_las_file('TEMPORARY.las', points)
-        self.__zip_las('TEMPORARY.las', filename)
-        os.system('rm TEMPORARY.las')
+        try:
+            PointCloudIO.save(
+                target_path,
+                points,
+                las_header=self.las_header,
+                labels_count=self.labels
+            )
+            print(f'Wrote {len(points)} points to {target_path}')
+        except ValueError as e:
+            print(f'Error writing file: {e}')
 
-    def __write_las_file(self, filename, points):
-        if self.las_header is None:
-            self.las_header = Header()
-            self.las_header.x_offset, self.las_header.y_offset, self.las_header.z_offset = 0.0, 0.0, 0.0
-            self.las_header.x_scale, self.las_header.y_scale, self.las_header.z_scale = 0.0001, 0.0001, 0.0001
-        if self.las_header.data_format_id < 2:
-            self.las_header.data_format_id = 2
-        with File(filename, self.las_header, mode='w') as f:
-            f.x, f.y, f.z = points[['x', 'y', 'z']].values.T
-            if 'r' in points:
-                f.red, f.green, f.blue = points[['r', 'g', 'b']].values.T
-            if 'class' in points:
-                f.classification = points['class'].values.astype(int)
-            if 'user_data' in points:
-                f.user_data = points['user_data'].values.astype(int)
-            if 'intensity' in points:
-                f.intensity = points['intensity'].values.astype(int)
-
-    def __write_xyz_file(self, filename, points):
-        points.to_csv(filename)
-
-
-    def __write_ply_file(self, filename, points):
-        folder = os.path.join(os.path.dirname(self.filename), 'advances')
-
-        if not os.path.isdir(folder):
-            os.makedirs(folder)
-
-        output_path = os.path.join(folder, filename)
-
-        # Validar XYZ
-        for col in ['x', 'y', 'z']:
-            if col not in points.columns:
-                raise ValueError(f"Missing required column '{col}'")
-
-        xyz = points[['x', 'y', 'z']].to_numpy(dtype=np.float32)
-
-        # Clases
-        if 'class' in points.columns:
-            cls = points['class'].fillna(-1).astype(np.int32).to_numpy()
-        else:
-            cls = -1 * np.ones(len(points), dtype=np.int32)
-
-        include_rgb = all(col in points.columns for col in ['r', 'g', 'b'])
-
-        if include_rgb:
-            rgb = points[['r', 'g', 'b']].to_numpy(dtype=np.uint8)
-            vertex_dtype = [
-                ('x', 'f4'), ('y', 'f4'), ('z', 'f4'),
-                ('red', 'u1'), ('green', 'u1'), ('blue', 'u1'),
-                ('class', 'i4')
-            ]
-        else:
-            vertex_dtype = [
-                ('x', 'f4'), ('y', 'f4'), ('z', 'f4'),
-                ('class', 'i4')
-            ]
-
-        vertex_array = np.empty(len(points), dtype=vertex_dtype)
-        vertex_array['x'] = xyz[:, 0]
-        vertex_array['y'] = xyz[:, 1]
-        vertex_array['z'] = xyz[:, 2]
-        vertex_array['class'] = cls
-
-        if include_rgb:
-            vertex_array['red'] = rgb[:, 0]
-            vertex_array['green'] = rgb[:, 1]
-            vertex_array['blue'] = rgb[:, 2]
-
-        el = PlyElement.describe(vertex_array, 'vertex')
-        PlyData([el], text=False).write(output_path)
-
-        print(f"Saved PLY file to: {output_path} (RGB included: {include_rgb})")
-
-
-
-    def __write_pcd_file(self, filename, points):
-        cloud = self.__to_open3d_point_cloud(points)
-        o3d.io.write_point_cloud(filename, cloud)
 
     def prepare_viewer(self, render_flag=None):
         """
