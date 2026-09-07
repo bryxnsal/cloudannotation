@@ -7,3 +7,4 @@ wheels/
 *.egg-info/
 build/
 dist/
+shortcuts_config.json
