@@ -41,9 +41,15 @@ class ShortcutsTableView(ttk.Frame):
         scroll.config(command=self.tree.yview)
 
         if self.on_double_click:
-            self.tree.bind("<Double-1>", lambda e: self.on_double_click())
+            def _on_dbl(e):
+                item = self.tree.identify_row(e.y)
+                if item:
+                    self.tree.selection_set(item)
+                    self.tree.focus(item)
+                self.on_double_click()
+            self.tree.bind("<Double-1>", _on_dbl)
 
-    def populate(self, class_items):
+    def populate(self, class_items, selected_index=None):
         """
         Populate table with list of tuples: (class_name, label_id, assigned_key)
         """
@@ -62,8 +68,22 @@ class ShortcutsTableView(ttk.Frame):
             )
 
         if self.rows_data:
-            self.tree.selection_set("0")
-            self.tree.focus("0")
+            target_idx = "0"
+            if selected_index is not None and 0 <= int(selected_index) < len(self.rows_data):
+                target_idx = str(selected_index)
+            self.tree.selection_set(target_idx)
+            self.tree.focus(target_idx)
+            self.tree.see(target_idx)
+
+    def get_selected_index(self):
+        """Return integer index of the currently selected row, or None."""
+        sel = self.tree.selection()
+        if not sel:
+            return None
+        try:
+            return int(sel[0])
+        except (ValueError, TypeError):
+            return None
 
     def get_selected_item(self):
         """Return (class_name, label_id, key) for selected row."""

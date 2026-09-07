@@ -119,14 +119,15 @@ class ShortcutsDialog(tk.Toplevel):
             command=self.destroy
         ).pack(side='right')
 
-    def refresh_table(self):
+    def refresh_table(self, preserve_selection=True):
         """Build items list from Config.labels and current working_mapping."""
+        selected_idx = self.table_view.get_selected_index() if preserve_selection else None
         class_to_key = {c: k for k, c in self.working_mapping.items()}
         items = []
         for class_name, label_id in Config.labels.items():
             key = class_to_key.get(class_name, None)
             items.append((class_name, label_id, key))
-        self.table_view.populate(items)
+        self.table_view.populate(items, selected_index=selected_idx)
 
     def assign_key_action(self):
         """Open capture popup to assign new key to selected row."""
@@ -152,7 +153,7 @@ class ShortcutsDialog(tk.Toplevel):
                     del self.working_mapping[new_key]
                 self.working_mapping[new_key] = class_name
 
-            self.refresh_table()
+            self.refresh_table(preserve_selection=True)
 
     def clear_key_action(self):
         """Clear key assigned to selected class."""
@@ -163,7 +164,7 @@ class ShortcutsDialog(tk.Toplevel):
         for k in list(self.working_mapping.keys()):
             if self.working_mapping[k] == class_name:
                 del self.working_mapping[k]
-        self.refresh_table()
+        self.refresh_table(preserve_selection=True)
 
     def disable_all_shortcuts_action(self):
         """Clear all shortcuts and uncheck Enable checkbox."""

@@ -21,11 +21,15 @@ class ShortcutsCaptureDialog(tk.Toplevel):
         self.resizable(False, False)
         self.configure(bg=COLORS['bg_primary'])
 
-        self.transient(parent)
-        self.grab_set()
-
         self._setup_ui()
         self.bind("<Key>", self._on_key_pressed)
+
+        self.transient(parent)
+        self.update_idletasks()
+        try:
+            self.grab_set()
+        except Exception:
+            pass
         self.focus_force()
 
     def _setup_ui(self):
