@@ -107,12 +107,12 @@ class StatusBarView(BaseComponent):
             self.log_frame.pack_forget()
             self.toggle_btn.configure(text="Log")
             self.show_logs.set(False)
-            self.app.root.geometry("540x820")
+            self.app.root.geometry("520x750")
         else:
             self.log_frame.pack(fill='both', expand=True, pady=(3, 0))
             self.toggle_btn.configure(text="Hide")
             self.show_logs.set(True)
-            self.app.root.geometry("540x940")
+            self.app.root.geometry("520x835")
 
     def log_message(self, message, level="INFO"):
         """Add timestamped message to status label and mini log."""

@@ -25,8 +25,8 @@ class ModernAnnotationGUI:
     def __init__(self, pc):
         self.root = tk.Tk()
         self.root.title("Point Cloud Annotator")
-        self.root.geometry("540x820")
-        self.root.minsize(500, 760)
+        self.root.geometry("520x750")
+        self.root.minsize(500, 720)
         self.root.configure(bg=COLORS['bg_primary'])
 
         # Always on top
