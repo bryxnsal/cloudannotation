@@ -17,6 +17,7 @@ import knn as knn
 from Voxelize import VoxelGrid
 from plyfile import PlyData, PlyElement
 from utils.labelToolPly import writeLabeled
+from core.viewer import CameraController, PptkViewerAdapter
 
 
 class PointCloud:
@@ -25,6 +26,8 @@ class PointCloud:
         self.max_points = max_points
         self.render_flag = render
         self.viewer = None
+        self.camera_controller = CameraController(lambda: self.viewer)
+        self.viewer_adapter = PptkViewerAdapter(self.camera_controller)
         self.resource = r
         self.las_header = None
         self.labels = labels
@@ -33,7 +36,7 @@ class PointCloud:
         self.showing = None
         self.index = None
         self.filename = filename
-        self.saved_cameras = {}
+        self.saved_cameras = self.camera_controller.saved_cameras
         self.active_roi = None
         self.max_undo_steps = 50
         self.undo_stack = []
@@ -557,58 +560,13 @@ class PointCloud:
         self.update_attributes()
 
         if cam_persp is not None and preserve_camera:
-            try:
-                # If rendering a subset (e.g. isolated work area), anchor lookat to the subset center
-                # while maintaining viewing angles (phi, theta) and appropriate distance, so mouse orbit
-                # works smoothly around the isolated object without jumping.
-                total_pts = len(self.points)
-                num_rendered = int(np.sum(mask[:]))
-                
-                if num_rendered < total_pts and num_rendered > 0:
-                    rendered_xyz = self.points.loc[mask[:], ['x', 'y', 'z']].to_numpy()
-                    min_bounds = np.min(rendered_xyz, axis=0)
-                    max_bounds = np.max(rendered_xyz, axis=0)
-                    subset_center = (min_bounds + max_bounds) / 2.0
-                    subset_extent = float(np.linalg.norm(max_bounds - min_bounds))
-
-                    old_lookat = np.array(cam_persp[0:3], dtype=float)
-                    phi = float(cam_persp[3])
-                    theta = float(cam_persp[4])
-                    r = float(cam_persp[5])
-
-                    # Calculate camera eye position
-                    view_dir = np.array([
-                        np.cos(theta) * np.cos(phi),
-                        np.cos(theta) * np.sin(phi),
-                        np.sin(theta)
-                    ])
-                    eye = old_lookat + r * view_dir
-
-                    # Vector from new lookat (subset center) to eye
-                    d = eye - subset_center
-                    r_new = float(np.linalg.norm(d))
-
-                    # Ensure camera distance is reasonable relative to subset size
-                    min_r = max(0.5, subset_extent * 0.8)
-                    max_r = max(min_r * 4.0, 500.0)
-                    r_new = max(min_r, min(r_new, max_r))
-
-                    phi_new = float(np.arctan2(d[1], d[0]))
-                    theta_new = float(np.arcsin(np.clip(d[2] / (r_new if r_new > 1e-4 else 1.0), -1.0, 1.0)))
-
-                    adjusted_persp = [
-                        float(subset_center[0]),
-                        float(subset_center[1]),
-                        float(subset_center[2]),
-                        phi_new,
-                        theta_new,
-                        r_new
-                    ]
-                    self.set_perspective(adjusted_persp)
-                else:
-                    self.set_perspective(cam_persp)
-            except Exception as e:
-                print("Error adjusting camera perspective:", e)
+            total_pts = len(self.points)
+            num_rendered = int(np.sum(mask[:]))
+            if num_rendered < total_pts and num_rendered > 0:
+                rendered_xyz = self.points.loc[mask[:], ['x', 'y', 'z']].to_numpy()
+                adjusted_persp = self.camera_controller.compute_anchor_perspective(cam_persp, rendered_xyz)
+                self.set_perspective(adjusted_persp)
+            else:
                 self.set_perspective(cam_persp)
 
     def renderClass(self,colores=True, mask=None, indices=None, highlighted=False, showing=False, invert=False):
@@ -819,41 +777,21 @@ class PointCloud:
         can return to this perspective later or use it in a rendering sequence.
         :return: Perspective parameters (lookat[0], lookat[1], lookat[2], phi, theta, r).
         """
-        if not self.viewer_is_ready():
-            return [0, 0, 0, 0, 0, 0]
-        try:
-            lookat = self.viewer.get('lookat')
-            phi = self.viewer.get('phi')
-            theta = self.viewer.get('theta')
-            r = self.viewer.get('r')
-            return [float(lookat[0]), float(lookat[1]), float(lookat[2]), float(phi), float(theta), float(r)]
-        except Exception:
-            return [0, 0, 0, 0, 0, 0]
+        return self.camera_controller.get_perspective()
 
     def set_perspective(self, p):
         """
-        This method allows the user to set the camera perspective manually in the pptk viewer. It accepts a list as
-        its single argument where the list defines the lookat position (x, y, z) the azimuthal angle, the elevation
-        angle, and the distance from the lookat position. This list is returned from the method 'get_perspective()'.
+        This method allows the user to set the camera perspective manually in the pptk viewer.
         """
-        if self.viewer_is_ready() and p is not None and len(p) >= 6:
-            try:
-                self.viewer.set(lookat=p[0:3], phi=p[3], theta=p[4], r=p[5])
-            except Exception as e:
-                print("Error setting perspective:", e)
+        return self.camera_controller.set_perspective(p)
 
     def save_camera(self, name='default'):
         """Save current camera perspective."""
-        persp = self.get_perspective()
-        self.saved_cameras[name] = persp
-        return persp
+        return self.camera_controller.save_camera(name)
 
     def restore_camera(self, name='default'):
         """Restore camera perspective."""
-        if name in self.saved_cameras:
-            self.set_perspective(self.saved_cameras[name])
-            return True
-        return False
+        return self.camera_controller.restore_camera(name)
 
     def select(self, indices=None, highlighted=True, showing=False, classes=None, data=None, intensity=None,
                red=None, green=None, blue=None, compliment=False, invert=False):
