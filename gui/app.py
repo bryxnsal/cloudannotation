@@ -113,10 +113,13 @@ class ModernAnnotationGUI:
         self.status_bar_view.log_message(message, level=level)
 
     def update_cloud_info(self):
-        """Fetch PointCloud stats and update [INFO] view."""
-        if hasattr(self, 'cloud_info_view') and self.pc:
+        """Fetch PointCloud stats and update [INFO] view and [RENDER & CAMERA] controls."""
+        if self.pc:
             stats = self.pc.get_stats()
-            self.cloud_info_view.update_stats(stats)
+            if hasattr(self, 'cloud_info_view'):
+                self.cloud_info_view.update_stats(stats)
+            if hasattr(self, 'rendering_view'):
+                self.rendering_view.update_point_size(stats.get('point_size'))
 
     # ------------------ Progress Bar Helpers ------------------
     def start_progress(self, message=None):

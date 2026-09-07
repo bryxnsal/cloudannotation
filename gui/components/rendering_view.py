@@ -53,6 +53,41 @@ class RenderingView(BaseComponent):
             command=self.render_selected_labels
         ).pack(side='right', padx=(2, 0), fill='x', expand=True)
 
+        # Dynamic Point Size Slider + Textbox control
+        ptsize_row = ttk.Frame(section_frame, style='Modern.TFrame')
+        ptsize_row.pack(fill='x', pady=(0, 6))
+
+        ttk.Label(
+            ptsize_row,
+            text="Pt Size:",
+            style='Title.TLabel',
+            font=('Segoe UI', 9, 'bold')
+        ).pack(side='left', padx=(0, 6))
+
+        initial_size = getattr(self.pc, 'point_size', 0.005) if self.pc else 0.005
+        self.ptsize_var = tk.StringVar(value="{:.3f}".format(initial_size))
+        self._updating_ptsize = False
+
+        self.ptsize_scale = ttk.Scale(
+            ptsize_row,
+            from_=0.001,
+            to=0.080,
+            orient='horizontal',
+            command=self._on_scale_change
+        )
+        self.ptsize_scale.set(initial_size)
+        self.ptsize_scale.pack(side='left', fill='x', expand=True, padx=(0, 6))
+
+        self.ptsize_entry = ttk.Entry(
+            ptsize_row,
+            textvariable=self.ptsize_var,
+            width=6,
+            font=('Segoe UI', 9)
+        )
+        self.ptsize_entry.pack(side='right')
+        self.ptsize_entry.bind('<Return>', lambda e: self._on_entry_submit())
+        self.ptsize_entry.bind('<FocusOut>', lambda e: self._on_entry_submit())
+
         # Listbox with scrollbar for labels
         list_frame = ttk.Frame(section_frame, style='Modern.TFrame')
         list_frame.pack(fill='x', pady=(0, 6))
@@ -225,3 +260,64 @@ class RenderingView(BaseComponent):
     def clear_label_selections(self):
         self.label_listbox.selection_clear(0, tk.END)
         self.log_message("Cleared all label selections", "INFO")
+
+    # ------------------ Dynamic Point Size Handlers ------------------
+    def _on_scale_change(self, val):
+        """Called when user drags or clicks the point size scale."""
+        if self._updating_ptsize:
+            return
+        try:
+            f_val = round(float(val), 4)
+            self._updating_ptsize = True
+            self.ptsize_var.set("{:.3f}".format(f_val))
+            self._updating_ptsize = False
+
+            if self.pc:
+                self.pc.set_point_size(f_val)
+            if hasattr(self.app, 'update_cloud_info'):
+                self.app.update_cloud_info()
+        except Exception as e:
+            self._updating_ptsize = False
+            self.log_message("Error changing point size: {}".format(e), "ERROR")
+
+    def _on_entry_submit(self):
+        """Called when user presses Enter or leaves focus on the point size entry."""
+        if self._updating_ptsize:
+            return
+        try:
+            raw_text = self.ptsize_var.get().strip()
+            f_val = float(raw_text)
+            f_val = max(0.001, min(0.100, f_val))
+            f_val = round(f_val, 4)
+
+            self._updating_ptsize = True
+            self.ptsize_scale.set(f_val)
+            self.ptsize_var.set("{:.3f}".format(f_val))
+            self._updating_ptsize = False
+
+            if self.pc:
+                self.pc.set_point_size(f_val)
+            if hasattr(self.app, 'update_cloud_info'):
+                self.app.update_cloud_info()
+        except ValueError:
+            # Revert to current scale value if invalid input
+            curr = self.ptsize_scale.get()
+            self._updating_ptsize = True
+            self.ptsize_var.set("{:.3f}".format(curr))
+            self._updating_ptsize = False
+        except Exception as e:
+            self._updating_ptsize = False
+            self.log_message("Error updating point size: {}".format(e), "ERROR")
+
+    def update_point_size(self, size):
+        """Update slider and entry widgets programmatically (e.g. from cloud reload)."""
+        if size is None or self._updating_ptsize:
+            return
+        try:
+            f_val = float(size)
+            self._updating_ptsize = True
+            self.ptsize_scale.set(f_val)
+            self.ptsize_var.set("{:.3f}".format(f_val))
+            self._updating_ptsize = False
+        except Exception:
+            self._updating_ptsize = False
