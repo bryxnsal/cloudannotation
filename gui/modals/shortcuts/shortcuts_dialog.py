@@ -57,7 +57,7 @@ class ShortcutsDialog(tk.Toplevel):
         # Subtitle hint
         hint_lbl = ttk.Label(
             self,
-            text="Double-click a row or click 'Assign Key' to set a key. Keys classify selected points instantly.",
+            text="Double-click a row or click 'Assign Key'. Shortcuts work directly in 3D viewers and GUI.\nNote: In PPTK, keys 1-9 rotate camera if no points are selected, or classify points if selected.",
             style='Modern.TLabel',
             font=('Segoe UI', 9)
         )

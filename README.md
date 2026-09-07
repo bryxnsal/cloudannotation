@@ -120,10 +120,16 @@ dataset/
 ```
 - Clic Izquierdo        -- Rotar alrededor
 - Ctrl + Clic Izquierdo -- Seleccionar puntos dentro del rectangulo
-- Tecla 7               -- Vista superior
-- Tecla 5               -- Cambiar perpectiva
-- Tecla 3 ,1            -- Vistas laterales
+- Tecla 7               -- Vista superior (PPTK)
+- Tecla 5               -- Cambiar perpectiva (PPTK)
+- Tecla 3, 1            -- Vistas laterales (PPTK)
 ```
+
+**Atajos de Clasificación Contextuales (Directos en el Visor 3D y en la GUI):**
+Los atajos de teclado (`1`-`9`, `q`, `w`, `e`, etc.) funcionan **directamente dentro del visor 3D (PPTK u Open3D)** sin necesidad de hacer clic sobre la GUI:
+- **Con puntos seleccionados (`Ctrl + Drag`)**: Al presionar una tecla de atajo (ej. `1` para *Suelo*, `2` para *Vegetación*, o letras configuradas), los puntos seleccionados se clasifican y colorean inmediatamente.
+- **Sin puntos seleccionados en PPTK**: Las teclas `1`-`9` preservan su comportamiento nativo de cámara (Superior, Frontal, Lateral, etc.), mientras que las teclas alfabéticas o el panel GUI seleccionan la clase activa.
+- **Personalización**: Puedes reasignar o activar/desactivar cualquier atajo pulsando el botón **"Shortcuts"** en la GUI.
 
 **Comandos en el terminal:**
 

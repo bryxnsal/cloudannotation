@@ -17,6 +17,7 @@ from gui.components.status_bar_view import StatusBarView
 from gui.modals.advances import AdvancesDialog
 from gui.modals.shortcuts import ShortcutsDialog
 from gui.services.shortcut_manager import ShortcutManager
+from gui.services.viewer_hotkey_listener import ViewerHotkeyListener
 
 class ModernAnnotationGUI:
     """
@@ -41,11 +42,20 @@ class ModernAnnotationGUI:
         # Initialize Shortcut Manager
         self.shortcut_manager = ShortcutManager()
 
-        # Global Keyboard Shortcuts
+        # Global Keyboard Shortcuts inside GUI window
         self.root.bind('<Control-z>', lambda e: self.undo_action())
         self.root.bind('<Control-Z>', lambda e: self.undo_action())
         self.root.bind('<Control-y>', lambda e: self.redo_action())
         self.root.bind('<Control-Y>', lambda e: self.redo_action())
+
+        # Initialize 3D Viewer / Global Hotkey Listener
+        self.viewer_hotkey_listener = ViewerHotkeyListener(
+            pc=self.pc,
+            shortcut_manager=self.shortcut_manager,
+            on_trigger=self.on_shortcut_triggered,
+            root=self.root
+        )
+        self.viewer_hotkey_listener.start()
 
         # Window close handler
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -62,6 +72,11 @@ class ModernAnnotationGUI:
 
     def on_close(self):
         """Handle window closing gracefully."""
+        try:
+            if hasattr(self, 'viewer_hotkey_listener') and self.viewer_hotkey_listener:
+                self.viewer_hotkey_listener.stop()
+        except Exception:
+            pass
         try:
             if self.pc:
                 self.pc.close_viewer()
