@@ -4,12 +4,13 @@ import datetime
 import threading
 import Config
 from PointCloud import PointCloud
+from AdvancesModal import AdvancesModal
 
 class ModernAnnotationGUI:
     def __init__(self, pc: PointCloud):
         self.root = tk.Tk()
         self.root.title("Point Cloud Annotator")
-        self.root.geometry("490x530")
+        self.root.geometry("520x720")
         self.root.configure(bg='#2b2b2b')
         
         # Make window always on top
@@ -50,11 +51,29 @@ class ModernAnnotationGUI:
         # Status tracking
         self.status_messages = []
 
+        # Window close handler
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
         # Build GUI
         self._create_widgets()
         
         # Add initial log message
         self.log_message("System initialized", "INFO")
+
+    def on_close(self):
+        """Handle window closing gracefully."""
+        try:
+            if self.pc:
+                self.pc.close_viewer()
+        except Exception:
+            pass
+        try:
+            self.root.quit()
+            self.root.destroy()
+        except Exception:
+            pass
+        import os
+        os._exit(0)
 
     def setup_styles(self):
         """Configure modern ttk styles with larger readable fonts."""
@@ -89,12 +108,83 @@ class ModernAnnotationGUI:
         main_frame.pack(fill='both', expand=True, padx=12, pady=12)
 
         # Control sections
+        self._create_info_section(main_frame)
         self._create_classification_section(main_frame)
+        self._create_ai_tools_section(main_frame)
         self._create_rendering_section(main_frame)
         self._create_save_export_section(main_frame)
 
         # Compact status at bottom
         self._create_status_section(main_frame)
+
+        # Initialize info display
+        self.update_cloud_info()
+
+    def _create_info_section(self, parent):
+        """Create [INFO] section with PLY point cloud metadata."""
+        section_frame = ttk.LabelFrame(parent, text=" [INFO] ", 
+                                       style='Modern.TLabelframe', padding=8)
+        section_frame.pack(fill='x', pady=(0, 8))
+
+        # Grid configuration for clean aligned layout
+        grid_frame = ttk.Frame(section_frame, style='Modern.TFrame')
+        grid_frame.pack(fill='x')
+        grid_frame.columnconfigure(1, weight=1)
+        grid_frame.columnconfigure(3, weight=1)
+
+        # Row 0: File and Size
+        ttk.Label(grid_frame, text="File:", style='Title.TLabel', font=('Segoe UI', 9, 'bold')).grid(row=0, column=0, sticky='w', padx=(0, 4))
+        self.info_file_lbl = ttk.Label(grid_frame, text="-", style='Modern.TLabel', font=('Segoe UI', 9))
+        self.info_file_lbl.grid(row=0, column=1, sticky='w', padx=(0, 10))
+
+        ttk.Label(grid_frame, text="Size:", style='Title.TLabel', font=('Segoe UI', 9, 'bold')).grid(row=0, column=2, sticky='w', padx=(0, 4))
+        self.info_size_lbl = ttk.Label(grid_frame, text="-", style='Modern.TLabel', font=('Segoe UI', 9))
+        self.info_size_lbl.grid(row=0, column=3, sticky='w')
+
+        # Row 1: Points and Point Size
+        ttk.Label(grid_frame, text="Points:", style='Title.TLabel', font=('Segoe UI', 9, 'bold')).grid(row=1, column=0, sticky='w', padx=(0, 4), pady=(2, 0))
+        self.info_points_lbl = ttk.Label(grid_frame, text="-", style='Modern.TLabel', font=('Segoe UI', 9))
+        self.info_points_lbl.grid(row=1, column=1, sticky='w', padx=(0, 10), pady=(2, 0))
+
+        ttk.Label(grid_frame, text="Pt Size:", style='Title.TLabel', font=('Segoe UI', 9, 'bold')).grid(row=1, column=2, sticky='w', padx=(0, 4), pady=(2, 0))
+        self.info_ptsize_lbl = ttk.Label(grid_frame, text="-", style='Modern.TLabel', font=('Segoe UI', 9))
+        self.info_ptsize_lbl.grid(row=1, column=3, sticky='w', pady=(2, 0))
+
+        # Row 2: Date and Modified vs Base stats
+        ttk.Label(grid_frame, text="Date:", style='Title.TLabel', font=('Segoe UI', 9, 'bold')).grid(row=2, column=0, sticky='w', padx=(0, 4), pady=(2, 0))
+        self.info_date_lbl = ttk.Label(grid_frame, text="-", style='Modern.TLabel', font=('Segoe UI', 9))
+        self.info_date_lbl.grid(row=2, column=1, sticky='w', padx=(0, 10), pady=(2, 0))
+
+        ttk.Label(grid_frame, text="Modified:", style='Title.TLabel', font=('Segoe UI', 9, 'bold')).grid(row=2, column=2, sticky='w', padx=(0, 4), pady=(2, 0))
+        self.info_modified_lbl = ttk.Label(grid_frame, text="-", style='Modern.TLabel', font=('Segoe UI', 9))
+        self.info_modified_lbl.grid(row=2, column=3, sticky='w', pady=(2, 0))
+
+    def update_cloud_info(self):
+        """Fetch stats from PointCloud and update [INFO] UI labels."""
+        try:
+            stats = self.pc.get_stats()
+            fname = stats['filename']
+            if len(fname) > 22:
+                fname = fname[:10] + "..." + fname[-9:]
+            self.info_file_lbl.configure(text=fname)
+
+            self.info_size_lbl.configure(text=f"{stats['file_size_mb']:.1f} MB")
+            self.info_points_lbl.configure(text=f"{stats['total_points']:,}")
+            self.info_ptsize_lbl.configure(text=f"{stats['point_size']}")
+
+            if stats['mtime']:
+                self.info_date_lbl.configure(text=stats['mtime'].strftime("%Y-%m-%d %H:%M"))
+            else:
+                self.info_date_lbl.configure(text="N/A")
+
+            changed_pts = stats.get('changed_points', 0)
+            changed_ratio = stats.get('changed_ratio', 0.0)
+            if changed_pts > 0:
+                self.info_modified_lbl.configure(text=f"{changed_pts:,} ({changed_ratio:.2f}%)")
+            else:
+                self.info_modified_lbl.configure(text="0 (0.0%)")
+        except Exception as e:
+            print("Error updating cloud info:", e)
 
     def _create_classification_section(self, parent):
         """Create classification and camera behavior section."""
@@ -149,15 +239,6 @@ class ModernAnnotationGUI:
         ttk.Button(button_row, text="Multi", 
                    command=self.render_selected_labels).pack(side='right', padx=(2, 0), fill='x', expand=True)
 
-        # Camera Save / Load buttons
-        cam_row = ttk.Frame(section_frame, style='Modern.TFrame')
-        cam_row.pack(fill='x', pady=(0, 6))
-
-        ttk.Button(cam_row, text="Save Cam", 
-                   command=self.save_camera_view).pack(side='left', padx=(0, 2), fill='x', expand=True)
-        ttk.Button(cam_row, text="Load Cam", 
-                   command=self.restore_camera_view).pack(side='right', padx=(2, 0), fill='x', expand=True)
-
         # Listbox with scrollbar
         list_frame = ttk.Frame(section_frame, style='Modern.TFrame')
         list_frame.pack(fill='x', pady=(0, 6))
@@ -178,9 +259,36 @@ class ModernAnnotationGUI:
         for label in Config.labels.keys():
             self.label_listbox.insert(tk.END, label)
 
-        # Select all button
-        ttk.Button(section_frame, text="Select All Labels", 
-                   command=self.select_all_labels).pack(fill='x')
+        # Selection buttons row
+        sel_buttons_row = ttk.Frame(section_frame, style='Modern.TFrame')
+        sel_buttons_row.pack(fill='x')
+
+        ttk.Button(sel_buttons_row, text="Select All Labels", 
+                   command=self.select_all_labels).pack(side='left', padx=(0, 2), fill='x', expand=True)
+        ttk.Button(sel_buttons_row, text="Clear Selections", 
+                   command=self.clear_label_selections).pack(side='right', padx=(2, 0), fill='x', expand=True)
+
+    def _create_ai_tools_section(self, parent):
+        """Create experimental AI and assisted tools section."""
+        section_frame = ttk.LabelFrame(parent, text=" [AI TOOLS (EXPERIMENTAL)] ", 
+                                       style='Modern.TLabelframe', padding=10)
+        section_frame.pack(fill='x', pady=(0, 8))
+
+        row1 = ttk.Frame(section_frame, style='Modern.TFrame')
+        row1.pack(fill='x', pady=(0, 4))
+
+        ttk.Button(row1, text="Auto Ground", 
+                   command=self.ai_auto_ground_action).pack(side='left', padx=(0, 2), fill='x', expand=True)
+        ttk.Button(row1, text="Classify Pole", 
+                   command=self.ai_classify_pole_action).pack(side='right', padx=(2, 0), fill='x', expand=True)
+
+        row2 = ttk.Frame(section_frame, style='Modern.TFrame')
+        row2.pack(fill='x')
+
+        ttk.Button(row2, text="Grow Cable", 
+                   command=self.ai_grow_cable_action).pack(side='left', padx=(0, 2), fill='x', expand=True)
+        ttk.Button(row2, text="Classify Veg", 
+                   command=self.ai_classify_veg_action).pack(side='right', padx=(2, 0), fill='x', expand=True)
 
     def _create_save_export_section(self, parent):
         """Create save/export section."""
@@ -188,13 +296,19 @@ class ModernAnnotationGUI:
                                        style='Modern.TLabelframe', padding=10)
         section_frame.pack(fill='x', pady=(0, 8))
 
-        button_row = ttk.Frame(section_frame, style='Modern.TFrame')
-        button_row.pack(fill='x')
+        row1 = ttk.Frame(section_frame, style='Modern.TFrame')
+        row1.pack(fill='x', pady=(0, 4))
         
-        ttk.Button(button_row, text="Save Advance", 
+        ttk.Button(row1, text="Save Advance", 
                    command=self.save_progress).pack(side='left', padx=(0, 4), fill='x', expand=True)
-        ttk.Button(button_row, text="Export Result", 
+        ttk.Button(row1, text="Export Result", 
                    command=self.export_result).pack(side='right', padx=(4, 0), fill='x', expand=True)
+
+        row2 = ttk.Frame(section_frame, style='Modern.TFrame')
+        row2.pack(fill='x')
+
+        ttk.Button(row2, text="Advances List", 
+                   command=self.open_advances_modal).pack(fill='x', expand=True)
 
     def _create_status_section(self, parent):
         """Create progress bar and toggleable status section."""
@@ -225,15 +339,20 @@ class ModernAnnotationGUI:
                                      command=self.toggle_logs)
         self.toggle_btn.pack(side='right', padx=2, pady=2)
 
-        # Collapsible log frame
-        self.log_frame = ttk.Frame(parent, style='Accent.TFrame')
+        # Collapsible log frame with scrollbar
+        self.log_frame = ttk.Frame(parent, style='Modern.TFrame')
         
-        self.mini_log = tk.Text(self.log_frame, height=3, 
+        log_scroll = ttk.Scrollbar(self.log_frame)
+        log_scroll.pack(side='right', fill='y')
+
+        self.mini_log = tk.Text(self.log_frame, height=5, 
                                 bg=self.colors['bg_primary'], 
                                 fg=self.colors['text_secondary'],
-                                font=('Consolas', 8), borderwidth=1, relief='solid',
-                                wrap='word', state='disabled')
-        self.mini_log.pack(fill='x', pady=(3, 0))
+                                font=('Consolas', 9), borderwidth=1, relief='solid',
+                                wrap='word', state='disabled',
+                                yscrollcommand=log_scroll.set)
+        self.mini_log.pack(side='left', fill='both', expand=True, pady=(3, 0))
+        log_scroll.config(command=self.mini_log.yview)
         
         # Configure colors
         self.mini_log.tag_configure('OK', foreground=self.colors['success'])
@@ -289,12 +408,12 @@ class ModernAnnotationGUI:
             self.log_frame.pack_forget()
             self.toggle_btn.configure(text="Log")
             self.show_logs.set(False)
-            self.root.geometry("490x540")
+            self.root.geometry("520x720")
         else:
-            self.log_frame.pack(fill='x', pady=(3, 0))
+            self.log_frame.pack(fill='both', expand=True, pady=(3, 0))
             self.toggle_btn.configure(text="Hide")
             self.show_logs.set(True)
-            self.root.geometry("490x610")
+            self.root.geometry("520x840")
 
     def log_message(self, message, level="INFO"):
         """Add message to status bar and optional mini log."""
@@ -355,10 +474,14 @@ class ModernAnnotationGUI:
         if overwrite:
             success_msg += " [Overwritten]"
 
+        def on_done(_):
+            self.update_cloud_info()
+
         self.run_async(
             lambda: self.pc.classify(label_value, overwrite=overwrite, preserve_camera=keep_cam),
             start_msg=f"Classifying: {selected_option} (Label {label_value})...",
-            success_msg=success_msg
+            success_msg=success_msg,
+            on_success=on_done
         )
 
     def undo_action(self):
@@ -366,6 +489,7 @@ class ModernAnnotationGUI:
             return self.pc.undo()
 
         def on_done(res):
+            self.update_cloud_info()
             if res:
                 success, msg = res
                 self.log_message(msg, "SUCCESS" if success else "WARNING")
@@ -381,6 +505,7 @@ class ModernAnnotationGUI:
             return self.pc.redo()
 
         def on_done(res):
+            self.update_cloud_info()
             if res:
                 success, msg = res
                 self.log_message(msg, "SUCCESS" if success else "WARNING")
@@ -479,7 +604,7 @@ class ModernAnnotationGUI:
 
         def task():
             if self.pc.is_work_area_active():
-                # Filter only within the active work area
+                # Filter only within the isolated work area
                 mask = self.pc.select(classes=selected_labels, highlighted=False)
                 mask.intersection(self.pc.active_roi.bools)
             else:
@@ -492,6 +617,11 @@ class ModernAnnotationGUI:
             return False
 
         def on_done(has_points):
+            if self.pc.is_work_area_active():
+                self.select_btn.configure(text="Unselect")
+            else:
+                self.select_btn.configure(text="Select")
+
             if not has_points:
                 self.log_message("No points found for selected labels", "WARNING")
 
@@ -507,30 +637,20 @@ class ModernAnnotationGUI:
         count = self.label_listbox.size()
         self.log_message(f"Selected all {count} labels", "INFO")
 
-    # ------------------ Camera Methods ------------------
-    def save_camera_view(self):
-        try:
-            persp = self.pc.save_camera('gui_cam')
-            self.log_message("Camera position saved", "SUCCESS")
-        except Exception as e:
-            self.log_message(f"Failed to save camera: {str(e)}", "ERROR")
-
-    def restore_camera_view(self):
-        try:
-            restored = self.pc.restore_camera('gui_cam')
-            if restored:
-                self.log_message("Camera position restored", "SUCCESS")
-            else:
-                self.log_message("No saved camera view found", "WARNING")
-        except Exception as e:
-            self.log_message(f"Failed to restore camera: {str(e)}", "ERROR")
+    def clear_label_selections(self):
+        self.label_listbox.selection_clear(0, tk.END)
+        self.log_message("Cleared all label selections", "INFO")
 
     # ------------------ Save / Export Methods ------------------
     def save_progress(self):
+        def on_saved(_):
+            self.update_cloud_info()
+
         self.run_async(
             lambda: self.pc.save(),
             start_msg="Saving advance...",
-            success_msg="Progress saved successfully"
+            success_msg="Progress saved successfully",
+            on_success=on_saved
         )
 
     def export_result(self):
@@ -538,6 +658,88 @@ class ModernAnnotationGUI:
             lambda: self.pc.export(),
             start_msg="Exporting results...",
             success_msg="Export completed successfully"
+        )
+
+    def open_advances_modal(self):
+        """Open the Advances List modal window."""
+        try:
+            AdvancesModal(self.root, self.pc, on_reload_callback=self.on_cloud_reloaded)
+        except Exception as e:
+            self.log_message(f"Error opening advances modal: {str(e)}", "ERROR")
+
+    def on_cloud_reloaded(self, filepath):
+        """Callback invoked when an advance or base file is reloaded from the modal."""
+        self.select_btn.configure(text="Select")
+        self.update_cloud_info()
+        self.log_message(f"Loaded point cloud: {datetime.datetime.now().strftime('%H:%M:%S')}", "SUCCESS")
+
+    # ------------------ AI Assisted Methods ------------------
+    def ai_auto_ground_action(self):
+        overwrite = self.overwrite_var.get()
+        def task():
+            return self.pc.ai_auto_ground(overwrite=overwrite)
+
+        def on_done(res):
+            self.update_cloud_info()
+            if res:
+                success, msg = res
+                self.log_message(msg, "SUCCESS" if success else "WARNING")
+
+        self.run_async(
+            task,
+            start_msg="Detecting and fitting ground plane...",
+            on_success=on_done
+        )
+
+    def ai_classify_pole_action(self):
+        overwrite = self.overwrite_var.get()
+        def task():
+            return self.pc.ai_classify_pole(overwrite=overwrite)
+
+        def on_done(res):
+            self.update_cloud_info()
+            if res:
+                success, msg = res
+                self.log_message(msg, "SUCCESS" if success else "WARNING")
+
+        self.run_async(
+            task,
+            start_msg="Analyzing pole height and structure...",
+            on_success=on_done
+        )
+
+    def ai_grow_cable_action(self):
+        overwrite = self.overwrite_var.get()
+        def task():
+            return self.pc.ai_grow_cable(overwrite=overwrite)
+
+        def on_done(res):
+            self.update_cloud_info()
+            if res:
+                success, msg = res
+                self.log_message(msg, "SUCCESS" if success else "WARNING")
+
+        self.run_async(
+            task,
+            start_msg="Clustering linear cable points...",
+            on_success=on_done
+        )
+
+    def ai_classify_veg_action(self):
+        overwrite = self.overwrite_var.get()
+        def task():
+            return self.pc.ai_classify_veg(overwrite=overwrite)
+
+        def on_done(res):
+            self.update_cloud_info()
+            if res:
+                success, msg = res
+                self.log_message(msg, "SUCCESS" if success else "WARNING")
+
+        self.run_async(
+            task,
+            start_msg="Analyzing volumetric vegetation foliage...",
+            on_success=on_done
         )
 
     def run(self):

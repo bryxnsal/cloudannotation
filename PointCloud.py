@@ -38,6 +38,8 @@ class PointCloud:
         self.max_undo_steps = 50
         self.undo_stack = []
         self.redo_stack = []
+        self.base_classes = None
+        self.full_cloud_lookat = None
         if filename is None:
             self.render_flag = False
         else:
@@ -45,6 +47,8 @@ class PointCloud:
                 self.load(advanceFile)
             else:
                 self.load(filename)
+            if hasattr(self, 'points') and self.points is not None and 'class' in self.points.columns:
+                self.base_classes = self.points['class'].to_numpy(copy=True)
 
     def __del__(self):
         if self.viewer:
@@ -537,7 +541,59 @@ class PointCloud:
         self.update_attributes()
 
         if cam_persp is not None and preserve_camera:
-            self.set_perspective(cam_persp)
+            try:
+                # If rendering a subset (e.g. isolated work area), anchor lookat to the subset center
+                # while maintaining viewing angles (phi, theta) and appropriate distance, so mouse orbit
+                # works smoothly around the isolated object without jumping.
+                total_pts = len(self.points)
+                num_rendered = int(np.sum(mask[:]))
+                
+                if num_rendered < total_pts and num_rendered > 0:
+                    rendered_xyz = self.points.loc[mask[:], ['x', 'y', 'z']].to_numpy()
+                    min_bounds = np.min(rendered_xyz, axis=0)
+                    max_bounds = np.max(rendered_xyz, axis=0)
+                    subset_center = (min_bounds + max_bounds) / 2.0
+                    subset_extent = float(np.linalg.norm(max_bounds - min_bounds))
+
+                    old_lookat = np.array(cam_persp[0:3], dtype=float)
+                    phi = float(cam_persp[3])
+                    theta = float(cam_persp[4])
+                    r = float(cam_persp[5])
+
+                    # Calculate camera eye position
+                    view_dir = np.array([
+                        np.cos(theta) * np.cos(phi),
+                        np.cos(theta) * np.sin(phi),
+                        np.sin(theta)
+                    ])
+                    eye = old_lookat + r * view_dir
+
+                    # Vector from new lookat (subset center) to eye
+                    d = eye - subset_center
+                    r_new = float(np.linalg.norm(d))
+
+                    # Ensure camera distance is reasonable relative to subset size
+                    min_r = max(0.5, subset_extent * 0.8)
+                    max_r = max(min_r * 4.0, 500.0)
+                    r_new = max(min_r, min(r_new, max_r))
+
+                    phi_new = float(np.arctan2(d[1], d[0]))
+                    theta_new = float(np.arcsin(np.clip(d[2] / (r_new if r_new > 1e-4 else 1.0), -1.0, 1.0)))
+
+                    adjusted_persp = [
+                        float(subset_center[0]),
+                        float(subset_center[1]),
+                        float(subset_center[2]),
+                        phi_new,
+                        theta_new,
+                        r_new
+                    ]
+                    self.set_perspective(adjusted_persp)
+                else:
+                    self.set_perspective(cam_persp)
+            except Exception as e:
+                print("Error adjusting camera perspective:", e)
+                self.set_perspective(cam_persp)
 
     def renderClass(self,colores=True, mask=None, indices=None, highlighted=False, showing=False, invert=False):
         """
@@ -639,6 +695,94 @@ class PointCloud:
     def is_work_area_active(self):
         """Check if work area ROI is currently active."""
         return self.active_roi is not None and np.sum(self.active_roi.bools) > 0
+
+    def get_base_filename(self):
+        """Return base PLY filename."""
+        return self.filename
+
+    def get_advances_dir(self):
+        """Return directory where advances for this cloud are stored."""
+        if not self.filename:
+            return None
+        return os.path.join(os.path.dirname(self.filename), 'advances')
+
+    def get_stats(self):
+        """Return summary dictionary of point cloud metadata and labels."""
+        total_pts = len(self.points) if hasattr(self, 'points') and self.points is not None else 0
+        labeled_pts = 0
+        changed_pts = 0
+        classes_count = {}
+        if total_pts > 0 and 'class' in self.points.columns:
+            counts = self.points['class'].value_counts()
+            classes_count = counts.to_dict()
+            labeled_pts = int((self.points['class'] > 0).sum())
+
+            # If base_classes is not set yet, initialize from base file or current points
+            if self.base_classes is None and self.filename and os.path.isfile(self.filename):
+                try:
+                    p = PlyData.read(self.filename)
+                    if 'class' in p['vertex'].data.dtype.names:
+                        self.base_classes = p['vertex'].data['class'].copy()
+                except Exception:
+                    pass
+
+            if self.base_classes is not None and len(self.base_classes) == total_pts:
+                cur_cls = self.points['class'].to_numpy()
+                changed_pts = int((cur_cls != self.base_classes).sum())
+
+        file_size_mb = 0.0
+        file_mtime = None
+        if self.filename and os.path.isfile(self.filename):
+            file_size_mb = os.path.getsize(self.filename) / (1024 * 1024)
+            file_mtime = datetime.datetime.fromtimestamp(os.path.getmtime(self.filename))
+
+        return {
+            'filename': os.path.basename(self.filename) if self.filename else 'Unknown',
+            'filepath': self.filename,
+            'total_points': total_pts,
+            'point_size': self.point_size,
+            'labeled_points': labeled_pts,
+            'labeled_ratio': (labeled_pts / total_pts * 100.0) if total_pts > 0 else 0.0,
+            'changed_points': changed_pts,
+            'changed_ratio': (changed_pts / total_pts * 100.0) if total_pts > 0 else 0.0,
+            'file_size_mb': file_size_mb,
+            'mtime': file_mtime,
+            'classes_count': classes_count
+        }
+
+    def reload_from_file(self, filepath, preserve_camera=True, is_new_base=False):
+        """Reload points from a given file (e.g. an advance or base file) into working memory."""
+        if not os.path.isfile(filepath):
+            raise FileNotFoundError(f"File not found: {filepath}")
+
+        cam_persp = None
+        if preserve_camera and self.viewer_is_ready():
+            cam_persp = self.get_perspective()
+
+        # Load new dataframe
+        df = self.__from_plyfile(filepath)
+        self.points = df
+        self.showing = Mask(len(self.points), True)
+        self.clear_work_area()
+        self.undo_stack.clear()
+        self.redo_stack.clear()
+
+        if is_new_base or self.base_classes is None:
+            if 'class' in self.points.columns:
+                self.base_classes = self.points['class'].to_numpy(copy=True)
+
+        # Render in viewer
+        if self.viewer_is_ready():
+            self.viewer.clear()
+            self.viewer.load(self.points[['x', 'y', 'z']])
+            self.viewer.set(point_size=self.point_size, selected=[])
+            self.update_attributes()
+            if cam_persp is not None and preserve_camera:
+                self.set_perspective(cam_persp)
+        else:
+            self.render(self.showing, preserve_camera=preserve_camera)
+
+        return True
 
     def highlight(self, mask=None, indices=None):
         """
@@ -798,7 +942,7 @@ class PointCloud:
             self.viewer.set(selected=[])
             if not preserve_camera:
                 self.render(showing=True, preserve_camera=False)
-        else:
+        elif self.render_flag and self.viewer is not None:
             self.render(showing=True, preserve_camera=preserve_camera)
 
     def undo(self):
@@ -1356,3 +1500,408 @@ class PointCloud:
             points, k, r, output_eigenvalues=True)[0])
         eigens.sort(axis=1)
         return eigens[:, 0] / eigens.sum(axis=1) * 3.0
+
+    # ------------------ AI Assisted Tools (Experimental) ------------------
+    def ai_auto_ground(self, distance_threshold=0.25):
+        """
+        Detect and classify ground plane using RANSAC planar fitting.
+        Applies on selected points if available, or currently showing points.
+        """
+        if not self.viewer_is_ready():
+            return False, "Viewer is not ready"
+
+        if self.has_selection():
+            mask = self.get_highlighted_mask()
+        elif self.is_work_area_active():
+            mask = Mask(len(self.points), False)
+            mask.bools = self.active_roi.bools.copy()
+        elif self.showing is not None:
+            mask = self.showing
+        else:
+            mask = Mask(len(self.points), True)
+
+        pts_indices = np.where(mask.bools)[0]
+        if len(pts_indices) < 100:
+            return False, "Not enough points to estimate ground plane"
+
+        xyz = self.points.loc[pts_indices, ['x', 'y', 'z']].values.astype(np.float64)
+
+        # Focus on lowest 35% height slice for robust ground fitting
+        z_min = np.min(xyz[:, 2])
+        z_max = np.max(xyz[:, 2])
+        z_cutoff = z_min + 0.35 * (z_max - z_min)
+        low_idx = np.where(xyz[:, 2] <= z_cutoff)[0]
+        if len(low_idx) >= 50:
+            fit_xyz = xyz[low_idx]
+        else:
+            fit_xyz = xyz
+
+    def ai_auto_ground(self, cell_size=1.0, distance_threshold=0.25, overwrite=False):
+        """
+        Fit a 2.5D surface to detect the ground plane across the selection,
+        handling sloped or uneven terrain. Respects user overwrite setting.
+        """
+        if not self.viewer_is_ready():
+            return False, "Viewer is not ready"
+
+        if not self.has_selection() and not self.is_work_area_active():
+            return False, "Select a region or isolate a work area first"
+
+        if self.has_selection():
+            mask = self.get_highlighted_mask()
+        else:
+            mask = Mask(len(self.points), False)
+            mask.bools = self.active_roi.bools.copy()
+
+        pts_indices = np.where(mask.bools)[0]
+        if len(pts_indices) < 20:
+            return False, "Not enough points selected for ground detection"
+
+        xyz = self.points.loc[pts_indices, ['x', 'y', 'z']].values
+
+        try:
+            xy = xyz[:, :2]
+            z = xyz[:, 2]
+
+            # 2.5D cell-based ground elevation estimation
+            xy_min = np.min(xy, axis=0)
+            gx = np.floor((xy[:, 0] - xy_min[0]) / cell_size).astype(int)
+            gy = np.floor((xy[:, 1] - xy_min[1]) / cell_size).astype(int)
+            cell_ids = gx + gy * 100000
+
+            unique_cids = np.unique(cell_ids)
+            z_ground_map = {}
+            for cid in unique_cids:
+                c_idx = np.where(cell_ids == cid)[0]
+                z_ground_map[cid] = np.percentile(z[c_idx], 8)
+
+            z_ground_local = np.array([z_ground_map[cid] for cid in cell_ids])
+            height_above_ground = z - z_ground_local
+
+            ground_local = np.where(height_above_ground <= distance_threshold)[0]
+            if len(ground_local) == 0:
+                return False, "No ground points detected"
+
+            ground_global = pts_indices[ground_local]
+            ground_mask = Mask(len(self.points), False)
+            ground_mask.bools[ground_global] = True
+
+            self.classify(cls=1, mask=ground_mask, overwrite=overwrite, preserve_camera=True)
+            return True, f"Auto Ground: Classified {len(ground_global)}/{len(pts_indices)} points as Suelo"
+        except Exception as e:
+            return False, f"Ground detection error: {str(e)}"
+
+    def ai_classify_pole(self, height_threshold=12.0, cylinder_radius=0.55, overwrite=False):
+        """
+        Segment vertical pole points even in low-density LIDAR scans using continuous
+        vertical span voting, neighborhood analysis, and ground base exclusion.
+        Respects user overwrite setting.
+        """
+        if not self.viewer_is_ready():
+            return False, "Viewer is not ready"
+
+        if not self.has_selection() and not self.is_work_area_active():
+            return False, "Select a pole region or isolate a work area first"
+
+        if self.has_selection():
+            mask = self.get_highlighted_mask()
+        else:
+            mask = Mask(len(self.points), False)
+            mask.bools = self.active_roi.bools.copy()
+
+        pts_indices = np.where(mask.bools)[0]
+        if len(pts_indices) < 8:
+            return False, "Not enough points selected for pole analysis"
+
+        xyz = self.points.loc[pts_indices, ['x', 'y', 'z']].values
+
+        try:
+            z_vals = xyz[:, 2]
+            z_min, z_max = np.min(z_vals), np.max(z_vals)
+            total_height = z_max - z_min
+            if total_height < 1.5:
+                return False, f"Selected object height ({total_height:.2f}m) is too short for a pole"
+
+            xy = xyz[:, :2]
+            n_pts = len(xyz)
+
+            # Subsample candidates to evaluate centers if selection is huge
+            if n_pts > 2000:
+                sample_idx = np.random.choice(n_pts, size=2000, replace=False)
+            else:
+                sample_idx = np.arange(n_pts)
+
+            cand_xy = xy[sample_idx]
+
+            from sklearn.neighbors import NearestNeighbors
+            nbrs_2d = NearestNeighbors(radius=cylinder_radius, algorithm='kd_tree').fit(xy)
+            indices_list = nbrs_2d.radius_neighbors(cand_xy, return_distance=False)
+
+            best_score = -1.0
+            best_center = None
+            best_indices = None
+
+            for i, in_radius_idx in enumerate(indices_list):
+                if len(in_radius_idx) < 5:
+                    continue
+                z_subset = z_vals[in_radius_idx]
+                span_z = np.max(z_subset) - np.min(z_subset)
+                if span_z < 1.5:
+                    continue
+
+                # Continuous vertical span score
+                score = span_z * np.log1p(len(in_radius_idx))
+                if score > best_score:
+                    best_score = score
+                    best_center = cand_xy[i]
+                    best_indices = in_radius_idx
+
+            if best_center is None or len(best_indices) < 5:
+                return False, "Could not find a prominent vertical pole axis in selection"
+
+            # Refine pole axis center using median of candidate points
+            center_x = np.median(xy[best_indices, 0])
+            center_y = np.median(xy[best_indices, 1])
+
+            # Horizontal distance from refined center
+            dists = np.sqrt((xy[:, 0] - center_x) ** 2 + (xy[:, 1] - center_y) ** 2)
+            pole_local_mask = dists <= cylinder_radius
+
+            # Exclude flat ground points at the very base
+            z_surrounding_ground = np.percentile(z_vals[dists > cylinder_radius], 5) if np.sum(dists > cylinder_radius) >= 10 else np.min(z_vals)
+            pole_local_mask = pole_local_mask & (z_vals >= (z_surrounding_ground + 0.15))
+
+            pole_global_indices = pts_indices[pole_local_mask]
+            if len(pole_global_indices) < 5:
+                return False, "Could not isolate enough pole points"
+
+            pole_z = self.points.loc[pole_global_indices, 'z'].values
+            pole_height = float(np.max(pole_z) - np.min(pole_z))
+
+            if pole_height > height_threshold:
+                cls_name = "Postes MT"
+                cls_code = 6
+            else:
+                cls_name = "Postes BT"
+                cls_code = 4
+
+            # Classify ONLY the segmented cylinder points
+            pole_mask = Mask(len(self.points), False)
+            pole_mask.bools[pole_global_indices] = True
+
+            self.classify(cls=cls_code, mask=pole_mask, overwrite=overwrite, preserve_camera=True)
+            return True, f"Classify Pole: {cls_name} (Height: {pole_height:.2f}m, Isolated {len(pole_global_indices)}/{len(pts_indices)} pts)"
+        except Exception as e:
+            return False, f"Pole detection error: {str(e)}"
+
+    def ai_grow_cable(self, min_clearance=1.5, overwrite=False):
+        """
+        Segment overhead cables (straight, catenary sag, or multi-cable bundles)
+        by estimating local elevation and identifying linear structures in the air.
+        Respects user overwrite setting.
+        """
+        if not self.viewer_is_ready():
+            return False, "Viewer is not ready"
+
+        if not self.has_selection() and not self.is_work_area_active():
+            return False, "Select points on cables or isolate a work area first"
+
+        if self.has_selection():
+            mask = self.get_highlighted_mask()
+        else:
+            mask = Mask(len(self.points), False)
+            mask.bools = self.active_roi.bools.copy()
+
+        pts_indices = np.where(mask.bools)[0]
+        if len(pts_indices) < 5:
+            return False, "Not enough points selected for cable analysis"
+
+        xyz = self.points.loc[pts_indices, ['x', 'y', 'z']].values
+
+        try:
+            from sklearn.neighbors import NearestNeighbors
+            xy = xyz[:, :2]
+            z_vals = xyz[:, 2]
+
+            # 2.5D ground surface estimation in 1.5m cells
+            cell_size = 1.5
+            xy_min = np.min(xy, axis=0)
+            gx = np.floor((xy[:, 0] - xy_min[0]) / cell_size).astype(int)
+            gy = np.floor((xy[:, 1] - xy_min[1]) / cell_size).astype(int)
+            cell_ids = gx + gy * 100000
+
+            unique_cids = np.unique(cell_ids)
+            z_ground_map = {cid: np.percentile(z_vals[cell_ids == cid], 8) for cid in unique_cids}
+            z_ground_local = np.array([z_ground_map[cid] for cid in cell_ids])
+            rel_height = z_vals - z_ground_local
+
+            # Aerial clearance: only consider points elevated above local ground
+            total_z_span = np.max(z_vals) - np.min(z_ground_local)
+            if total_z_span >= 2.5:
+                air_mask = rel_height >= min_clearance
+            else:
+                air_mask = np.ones(len(xyz), dtype=bool)
+
+            air_indices = np.where(air_mask)[0]
+            if len(air_indices) < 4:
+                return False, "No points found suspended in the air within selection"
+
+            air_xyz = xyz[air_indices]
+            n_air = len(air_xyz)
+
+            k = min(8, n_air - 1)
+            nbrs = NearestNeighbors(n_neighbors=k + 1, algorithm='kd_tree').fit(air_xyz)
+            _, nn_indices = nbrs.kneighbors(air_xyz)
+
+            is_cable = np.zeros(n_air, dtype=bool)
+            for i in range(n_air):
+                local_pts = air_xyz[nn_indices[i]]
+                cov = np.cov(local_pts, rowvar=False)
+                if cov.shape != (3, 3):
+                    continue
+
+                eigvals, eigvecs = np.linalg.eigh(cov)
+                eigvals = np.maximum(eigvals, 1e-9)
+                l1, l2, l3 = eigvals[0], eigvals[1], eigvals[2]
+
+                linearity = (l3 - l2) / l3
+                scattering = l1 / l3
+                primary_dir = eigvecs[:, 2]
+                verticality = abs(primary_dir[2])
+
+                # Cables: Linear (>= 0.45), low 3D scattering (<= 0.12), not purely vertical (<= 0.80)
+                if linearity >= 0.45 and scattering <= 0.12 and verticality <= 0.80:
+                    is_cable[i] = True
+
+            cable_air_idx = air_indices[is_cable]
+            if len(cable_air_idx) == 0:
+                return False, "No linear cable structures detected at elevated height"
+
+            cable_global = pts_indices[cable_air_idx]
+            cable_mask = Mask(len(self.points), False)
+            cable_mask.bools[cable_global] = True
+
+            self.classify(cls=5, mask=cable_mask, overwrite=overwrite, preserve_camera=True)
+            return True, f"Grow Cable: Classified {len(cable_global)}/{len(pts_indices)} points as Cables BT"
+        except Exception as e:
+            return False, f"Cable analysis error: {str(e)}"
+
+    def ai_classify_veg(self, min_clearance=0.35, overwrite=False):
+        """
+        Segment vegetation (trees, bushes, foliage) based on 3D volumetric scattering
+        and local 2.5D elevation above ground, classifying points as Vegetación (cls=2).
+        Explicitly protects already labeled cables, poles, and buildings, respecting overwrite.
+        """
+        if not self.viewer_is_ready():
+            return False, "Viewer is not ready"
+
+        if not self.has_selection() and not self.is_work_area_active():
+            return False, "Select a vegetation region or isolate a work area first"
+
+        if self.has_selection():
+            mask = self.get_highlighted_mask()
+        else:
+            mask = Mask(len(self.points), False)
+            mask.bools = self.active_roi.bools.copy()
+
+        pts_indices = np.where(mask.bools)[0]
+        if len(pts_indices) < 10:
+            return False, "Not enough points selected for vegetation analysis"
+
+        # Check existing classes in selection
+        current_classes = self.points.loc[pts_indices, 'class'].values
+
+        # Cables and poles that must NEVER be overwritten as foliage even if user selects over them
+        PROTECTED_CLASSES = {
+            4, 6, 8,            # Postes BT, MT, AT
+            5, 7, 9, 21, 22, 23 # Cables BT, MT, AT, MT 1, 2, 3
+        }
+
+        xyz = self.points.loc[pts_indices, ['x', 'y', 'z']].values
+
+        try:
+            from sklearn.neighbors import NearestNeighbors
+            xy = xyz[:, :2]
+            z_vals = xyz[:, 2]
+
+            # 2.5D ground surface estimation in 1.0m cells
+            cell_size = 1.0
+            xy_min = np.min(xy, axis=0)
+            gx = np.floor((xy[:, 0] - xy_min[0]) / cell_size).astype(int)
+            gy = np.floor((xy[:, 1] - xy_min[1]) / cell_size).astype(int)
+            cell_ids = gx + gy * 100000
+
+            unique_cids = np.unique(cell_ids)
+            z_ground_map = {cid: np.percentile(z_vals[cell_ids == cid], 8) for cid in unique_cids}
+            z_ground_local = np.array([z_ground_map[cid] for cid in cell_ids])
+            height_above_ground = z_vals - z_ground_local
+
+            # Filter points above ground clearance
+            total_z_span = np.max(z_vals) - np.min(z_ground_local)
+            if total_z_span >= 1.5:
+                above_ground_mask = height_above_ground >= min_clearance
+            else:
+                above_ground_mask = np.ones(len(xyz), dtype=bool)
+
+            cand_indices = np.where(above_ground_mask)[0]
+            if len(cand_indices) < 5:
+                return False, "No elevated points found above ground level in selection"
+
+            cand_xyz = xyz[cand_indices]
+            n_cand = len(cand_xyz)
+
+            k = min(8, n_cand - 1)
+            nbrs = NearestNeighbors(n_neighbors=k + 1, algorithm='kd_tree').fit(xyz)
+            _, nn_indices = nbrs.kneighbors(cand_xyz)
+
+            is_veg = np.zeros(n_cand, dtype=bool)
+            for i in range(n_cand):
+                orig_idx = cand_indices[i]
+                orig_cls = current_classes[orig_idx]
+
+                # If already classified as a cable or pole, protect it completely!
+                if orig_cls in PROTECTED_CLASSES:
+                    continue
+
+                # If overwrite is False and point is already classified (> 0), don't overwrite
+                if not overwrite and orig_cls > 0:
+                    continue
+
+                local_pts = xyz[nn_indices[i]]
+                cov = np.cov(local_pts, rowvar=False)
+                if cov.shape != (3, 3):
+                    continue
+
+                eigvals, eigvecs = np.linalg.eigh(cov)
+                eigvals = np.maximum(eigvals, 1e-9)
+                l1, l2, l3 = eigvals[0], eigvals[1], eigvals[2]
+
+                linearity = (l3 - l2) / l3
+                planarity = (l2 - l1) / l3
+                scattering = l1 / l3
+                primary_dir = eigvecs[:, 2]
+                verticality = abs(primary_dir[2])
+
+                # Exclude cables (high linearity, low scattering, horizontal)
+                is_cable = (linearity >= 0.60 and scattering <= 0.05 and verticality <= 0.40)
+                # Exclude poles (high verticality, high linearity)
+                is_pole = (verticality >= 0.70 and linearity >= 0.45)
+                # Exclude clean planar walls/roofs
+                is_plane = (planarity >= 0.75 and scattering <= 0.04)
+
+                if not is_cable and not is_pole and not is_plane:
+                    is_veg[i] = True
+
+            veg_local_idx = cand_indices[is_veg]
+            if len(veg_local_idx) == 0:
+                return False, "No vegetation patterns detected in selection"
+
+            veg_global = pts_indices[veg_local_idx]
+            veg_mask = Mask(len(self.points), False)
+            veg_mask.bools[veg_global] = True
+
+            self.classify(cls=2, mask=veg_mask, overwrite=overwrite, preserve_camera=True)
+            return True, f"Classify Veg: Classified {len(veg_global)}/{len(pts_indices)} points as Vegetación"
+        except Exception as e:
+            return False, f"Vegetation analysis error: {str(e)}"
+

@@ -122,5 +122,13 @@ if __name__ == "__main__":
     gui_thread.start()
 
 
-    code.interact(local=locals())
+    try:
+        code.interact(local=locals())
+    finally:
+        try:
+            pc.close_viewer()
+        except Exception:
+            pass
+        import os
+        os._exit(0)
 
