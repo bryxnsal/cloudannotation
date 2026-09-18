@@ -258,7 +258,7 @@ class VispyViewerAdapter(BaseViewerAdapter):
                 size=float(self.point_size),
                 symbol='square'
             )
-            self.scatter.set_gl_state(depth_test=True, blend=False)
+            self.scatter.set_gl_state(depth_test=True, blend=True, blend_func=('src_alpha', 'one_minus_src_alpha'))
 
             if preserve_camera and saved_cam is not None:
                 self._restore_camera_state(saved_cam)
@@ -309,7 +309,7 @@ class VispyViewerAdapter(BaseViewerAdapter):
                     size=float(self.point_size),
                     symbol='square'
                 )
-                scatter.set_gl_state(depth_test=True, blend=False)
+                scatter.set_gl_state(depth_test=True, blend=True, blend_func=('src_alpha', 'one_minus_src_alpha'))
                 view.add(scatter)
 
                 # Selection rectangle (drawn on top in screen space)
