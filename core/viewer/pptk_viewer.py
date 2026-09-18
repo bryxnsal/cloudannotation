@@ -1,7 +1,11 @@
 """
 PptkViewerAdapter: Encapsulates all interactions with the PPTK 3D point cloud viewer.
 """
-import pptk
+try:
+    import pptk
+except (ImportError, OSError):
+    pptk = None
+
 import numpy as np
 from core.viewer.base_viewer import BaseViewerAdapter
 
@@ -24,12 +28,18 @@ class PptkViewerAdapter(BaseViewerAdapter):
             return False
 
     def close(self):
-        """Close viewer process gracefully."""
-        if self.is_ready():
+        """Close viewer process gracefully or forcibly."""
+        if self.viewer is not None:
+            proc = getattr(self.viewer, '_process', None)
             try:
                 self.viewer.close()
             except Exception:
                 pass
+            if proc is not None:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
         self.viewer = None
 
     def set_point_size(self, size):
@@ -160,4 +170,16 @@ class PptkViewerAdapter(BaseViewerAdapter):
                 return True
             except Exception as e:
                 print("Error setting selection in viewer:", e)
+        return False
+
+    def get_camera_parameters(self):
+        """Return current camera perspective list if camera controller is present."""
+        if self.camera_controller:
+            return self.camera_controller.get_perspective()
+        return None
+
+    def set_camera_parameters(self, params) -> bool:
+        """Restore camera perspective list."""
+        if params is not None and self.camera_controller:
+            return self.restore_camera_after_geometry_load(params)
         return False

@@ -195,16 +195,69 @@ class PointCloud:
         self.viewer_adapter.render(self.points, self.showing, preserve_camera=preserve_camera)
 
     def get_perspective(self):
-        return self.camera_controller.get_perspective()
+        if self.camera_controller:
+            return self.camera_controller.get_perspective()
+        if hasattr(self.viewer_adapter, 'get_camera_parameters'):
+            return self.viewer_adapter.get_camera_parameters()
+        return None
 
     def set_perspective(self, p):
-        return self.camera_controller.set_perspective(p)
+        if self.camera_controller:
+            return self.camera_controller.set_perspective(p)
+        if hasattr(self.viewer_adapter, 'set_camera_parameters'):
+            return self.viewer_adapter.set_camera_parameters(p)
+        return False
 
     def save_camera(self, name='default'):
-        return self.camera_controller.save_camera(name)
+        persp = self.get_perspective()
+        if self.camera_controller:
+            return self.camera_controller.save_camera(name)
+        self.saved_cameras[name] = persp
+        return persp
 
     def restore_camera(self, name='default'):
-        return self.camera_controller.restore_camera(name)
+        if self.camera_controller:
+            return self.camera_controller.restore_camera(name)
+        if name in self.saved_cameras:
+            return self.set_perspective(self.saved_cameras[name])
+        return False
+
+    def refresh_viewer(self):
+        """
+        Kill/close the active viewer and reopen it preserving the current camera position and geometry.
+        """
+        if not self.render_flag:
+            self.render_flag = True
+
+        # 1. Capture current camera perspective before terminating the viewer
+        cam_persp = None
+        try:
+            if hasattr(self.viewer_adapter, 'get_camera_parameters'):
+                cam_persp = self.viewer_adapter.get_camera_parameters()
+            elif self.camera_controller:
+                cam_persp = self.camera_controller.get_perspective()
+        except Exception as e:
+            print("PointCloud: Notice - could not read camera before killing viewer:", e)
+
+        # 2. Force close / kill viewer process
+        try:
+            self.viewer_adapter.close()
+        except Exception as e:
+            print("PointCloud: Error closing viewer during refresh:", e)
+
+        # 3. If there are points loaded, reopen and render with preserved camera
+        if hasattr(self, 'points') and self.points is not None and len(self.points) > 0:
+            active_mask = self.showing if self.showing is not None else Mask(len(self.points), True)
+            self.viewer_adapter.render(self.points, active_mask, preserve_camera=False)
+            if cam_persp is not None:
+                try:
+                    if hasattr(self.viewer_adapter, 'set_camera_parameters'):
+                        self.viewer_adapter.set_camera_parameters(cam_persp)
+                    elif self.camera_controller:
+                        self.camera_controller.set_perspective(cam_persp)
+                except Exception as e:
+                    print("PointCloud: Could not restore camera after viewer refresh:", e)
+        return True
 
     # ------------------ Selection & ROI ------------------
     def get_relative_indices(self, mask, relative=None):

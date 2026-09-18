@@ -1,5 +1,11 @@
 
-from pptk import kdtree
+try:
+    from pptk import kdtree
+    HAS_PPTK = True
+except (ImportError, OSError):
+    kdtree = None
+    HAS_PPTK = False
+
 from scipy.spatial import KDTree
 from annoy import AnnoyIndex
 import numpy as np
@@ -72,8 +78,12 @@ class Query:
     def pptk(self, points):
         if self.pptk_index is not None:
             self.delete_pptk()
-        self.pptk_index = kdtree._build(points)
-        self.pptk_n = len(points)
+        if kdtree is not None:
+            self.pptk_index = kdtree._build(points)
+            self.pptk_n = len(points)
+        else:
+            # Fallback to SciPy KDTree seamlessly on platforms without PPTK (e.g. Windows)
+            self.scipy(points)
 
     def scipy(self, points, leaf_size=100):
         if self.scipy_index is not None:

@@ -3,8 +3,11 @@ Geometric, density, and feature extraction filters.
 """
 from collections import defaultdict
 import numpy as np
-from tqdm import tqdm
-import pptk
+try:
+    import pptk
+except (ImportError, OSError):
+    pptk = None
+
 import knn as knn
 from Voxelize import VoxelGrid
 
@@ -73,18 +76,63 @@ class PointCloudFilters:
     @staticmethod
     def estimate_normals(points_xyz: np.ndarray, k: int = 100, r: float = 0.35) -> np.ndarray:
         """
-        Compute surface normals using pptk PCA.
+        Compute surface normals using pptk PCA, with Open3D/fallback support.
         """
-        return np.abs(pptk.estimate_normals(points_xyz, k, r))
+        if pptk is not None:
+            return np.abs(pptk.estimate_normals(points_xyz, k, r))
+
+        # Fallback using Open3D if available
+        try:
+            import open3d as o3d
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(points_xyz)
+            pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=r, max_nn=k))
+            normals = np.asarray(pcd.normals)
+            return np.abs(normals)
+        except Exception:
+            pass
+
+        # Fallback using SciPy KDTree + SVD/PCA
+        from scipy.spatial import cKDTree
+        tree = cKDTree(points_xyz)
+        normals = np.zeros_like(points_xyz)
+        for i, p in enumerate(points_xyz):
+            _, idxs = tree.query(p, k=min(k, len(points_xyz)), distance_upper_bound=r)
+            valid = [idx for idx in idxs if idx < len(points_xyz)]
+            if len(valid) >= 3:
+                pts = points_xyz[valid] - np.mean(points_xyz[valid], axis=0)
+                _, _, vh = np.linalg.svd(pts, full_matrices=False)
+                normals[i] = vh[2]
+            else:
+                normals[i] = [0.0, 0.0, 1.0]
+        return np.abs(normals)
 
     @staticmethod
     def estimate_curvature(points_xyz: np.ndarray, k: int = 100, r: float = 0.35) -> np.ndarray:
         """
-        Compute surface curvature using pptk eigenvalues.
+        Compute surface curvature using eigenvalues.
         """
-        eigens = np.abs(pptk.estimate_normals(points_xyz, k, r, output_eigenvalues=True)[0])
-        eigens.sort(axis=1)
-        return eigens[:, 0] / eigens.sum(axis=1) * 3.0
+        if pptk is not None:
+            eigens = np.abs(pptk.estimate_normals(points_xyz, k, r, output_eigenvalues=True)[0])
+            eigens.sort(axis=1)
+            return eigens[:, 0] / eigens.sum(axis=1) * 3.0
+
+        # Fallback using SciPy KDTree + SVD/PCA eigenvalues
+        from scipy.spatial import cKDTree
+        tree = cKDTree(points_xyz)
+        curvatures = np.zeros(len(points_xyz))
+        for i, p in enumerate(points_xyz):
+            _, idxs = tree.query(p, k=min(k, len(points_xyz)), distance_upper_bound=r)
+            valid = [idx for idx in idxs if idx < len(points_xyz)]
+            if len(valid) >= 3:
+                pts = points_xyz[valid] - np.mean(points_xyz[valid], axis=0)
+                cov = np.cov(pts.T)
+                eigvals = np.sort(np.linalg.eigvalsh(cov))
+                total = np.sum(eigvals)
+                curvatures[i] = (eigvals[0] / total * 3.0) if total > 1e-12 else 0.0
+            else:
+                curvatures[i] = 0.0
+        return curvatures
 
     @staticmethod
     def hough_lines(points_xy: np.ndarray, theta_precision: float = 0.5, angle_range: float = 90.0,

@@ -39,12 +39,22 @@ if sys.platform.startswith('linux') and 'CDANN_COMPAT_ACTIVE' not in os.environ:
 # Auto-configure TCL_LIBRARY and TK_LIBRARY for portable Python distributions (e.g., uv managed CPython)
 if 'TCL_LIBRARY' not in os.environ or 'TK_LIBRARY' not in os.environ:
     base_prefix = getattr(sys, 'base_prefix', sys.prefix)
-    tcl_candidate = os.path.join(base_prefix, 'lib', 'tcl8.6')
-    tk_candidate = os.path.join(base_prefix, 'lib', 'tk8.6')
-    if os.path.isdir(tcl_candidate):
-        os.environ.setdefault('TCL_LIBRARY', tcl_candidate)
-    if os.path.isdir(tk_candidate):
-        os.environ.setdefault('TK_LIBRARY', tk_candidate)
+    tcl_candidates = [
+        os.path.join(base_prefix, 'lib', 'tcl8.6'),
+        os.path.join(base_prefix, 'tcl', 'tcl8.6'),
+    ]
+    tk_candidates = [
+        os.path.join(base_prefix, 'lib', 'tk8.6'),
+        os.path.join(base_prefix, 'tcl', 'tk8.6'),
+    ]
+    for cand in tcl_candidates:
+        if os.path.isdir(cand):
+            os.environ.setdefault('TCL_LIBRARY', cand)
+            break
+    for cand in tk_candidates:
+        if os.path.isdir(cand):
+            os.environ.setdefault('TK_LIBRARY', cand)
+            break
 
 import argparse
 from genericpath import isdir, isfile
@@ -118,6 +128,9 @@ def main():
 
     command_queue = queue.Queue()
 
+    # On Windows or when explicitly requested, use Open3D as the 3D visualizer
+    chosen_viewer = 'open3d' if (opt.use_open3d or sys.platform.startswith('win32')) else 'pptk'
+
     pc = PointCloud(
         opt_file,
         opt.point_size,
@@ -126,7 +139,7 @@ def main():
         Config.labels,
         opt.r,
         resource_filename,
-        viewer_type='open3d' if opt.use_open3d else 'pptk',
+        viewer_type=chosen_viewer,
     )
 
     gui = ModernAnnotationGUI(pc)

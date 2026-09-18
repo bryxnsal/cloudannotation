@@ -139,7 +139,8 @@ class Open3dViewerAdapter(BaseViewerAdapter):
 
         # Initialize visualizer window if not already active
         if not self.is_ready():
-            self._start_visualizer(xyz, rgb)
+            initial_cam = self.get_camera_parameters() if preserve_camera else None
+            self._start_visualizer(xyz, rgb, initial_camera_params=initial_cam)
             return True
 
         with self._lock:
@@ -168,7 +169,7 @@ class Open3dViewerAdapter(BaseViewerAdapter):
                 print("Open3dViewer: Error rendering geometry:", e)
                 return False
 
-    def _start_visualizer(self, initial_xyz, initial_rgb):
+    def _start_visualizer(self, initial_xyz, initial_rgb, initial_camera_params=None):
         """Create and launch Open3D visualizer in a background thread."""
         ready_event = threading.Event()
 
@@ -181,6 +182,16 @@ class Open3dViewerAdapter(BaseViewerAdapter):
                 pcd.points = o3d.utility.Vector3dVector(initial_xyz)
                 pcd.colors = o3d.utility.Vector3dVector(initial_rgb)
                 vis.add_geometry(pcd)
+
+                # Restore initial camera perspective if available
+                cam_to_apply = initial_camera_params or self._saved_view_params
+                if cam_to_apply is not None:
+                    try:
+                        view_ctrl = vis.get_view_control()
+                        if view_ctrl:
+                            view_ctrl.convert_from_pinhole_camera_parameters(cam_to_apply, allow_arbitrary=True)
+                    except Exception as ce:
+                        print("Open3dViewer: Could not restore initial camera:", ce)
 
                 render_opt = vis.get_render_option()
                 if render_opt:
@@ -240,3 +251,32 @@ class Open3dViewerAdapter(BaseViewerAdapter):
                 return True
             except Exception:
                 return False
+
+    def get_camera_parameters(self):
+        """Capture pinhole camera parameters from Open3D view control."""
+        if self.is_ready():
+            with self._lock:
+                try:
+                    view_ctrl = self.vis.get_view_control()
+                    if view_ctrl:
+                        cam = view_ctrl.convert_to_pinhole_camera_parameters()
+                        self._saved_view_params = cam
+                        return cam
+                except Exception as e:
+                    print("Open3dViewer: Error capturing camera parameters:", e)
+        return self._saved_view_params
+
+    def set_camera_parameters(self, params) -> bool:
+        """Restore pinhole camera parameters in Open3D view control."""
+        if params is None:
+            return False
+        self._saved_view_params = params
+        if self.is_ready():
+            with self._lock:
+                try:
+                    view_ctrl = self.vis.get_view_control()
+                    if view_ctrl:
+                        return bool(view_ctrl.convert_from_pinhole_camera_parameters(params, allow_arbitrary=True))
+                except Exception as e:
+                    print("Open3dViewer: Error setting camera parameters:", e)
+        return False

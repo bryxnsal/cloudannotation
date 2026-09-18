@@ -117,7 +117,7 @@ class RenderingView(BaseComponent):
 
         # Bottom row: Select All / Clear selections
         sel_buttons_row = ttk.Frame(section_frame, style='Modern.TFrame')
-        sel_buttons_row.pack(fill='x')
+        sel_buttons_row.pack(fill='x', pady=(0, 6))
 
         ttk.Button(
             sel_buttons_row,
@@ -130,6 +130,16 @@ class RenderingView(BaseComponent):
             text="Clear Selections",
             command=self.clear_label_selections
         ).pack(side='right', padx=(2, 0), fill='x', expand=True)
+
+        # Viewer Recovery Row: Refresh Viewer
+        refresh_row = ttk.Frame(section_frame, style='Modern.TFrame')
+        refresh_row.pack(fill='x')
+
+        ttk.Button(
+            refresh_row,
+            text="Refresh Viewer",
+            command=self.refresh_viewer
+        ).pack(fill='x', expand=True)
 
     def _get_keep_camera(self):
         """Camera orientation is preserved by default across all renders."""
@@ -259,6 +269,30 @@ class RenderingView(BaseComponent):
     def clear_label_selections(self):
         self.label_listbox.selection_clear(0, tk.END)
         self.log_message("Cleared all label selections", "INFO")
+
+    def refresh_viewer(self):
+        """Kill the current 3D viewer window/process and reopen it, preserving camera orientation."""
+        if not self.pc or not hasattr(self.pc, 'points') or self.pc.points is None or len(self.pc.points) == 0:
+            self.log_message("No point cloud loaded to display.", "WARNING")
+            return
+
+        def task():
+            return self.pc.refresh_viewer()
+
+        def on_done(_):
+            # Synchronize point size on new viewer window
+            try:
+                curr_size = float(self.ptsize_var.get())
+                self.pc.set_point_size(curr_size)
+            except Exception:
+                pass
+
+        self.run_async(
+            task,
+            start_msg="Refreshing 3D viewer (killing & recreating window)...",
+            success_msg="3D viewer refreshed successfully (camera preserved)",
+            on_success=on_done
+        )
 
     # ------------------ Dynamic Point Size Handlers ------------------
     def _on_scale_change(self, val):

@@ -67,7 +67,23 @@ class ViewerHotkeyListener:
             self._listener = None
 
     def _get_active_window_info(self):
-        """Query the currently focused X11 window (PID, WM_CLASS, WM_NAME)."""
+        """Query the currently focused window (PID, WM_CLASS/Process, WM_NAME/Title)."""
+        if sys.platform.startswith('win32'):
+            try:
+                import ctypes
+                hwnd = ctypes.windll.user32.GetForegroundWindow()
+                if not hwnd:
+                    return None, "", ""
+                pid = ctypes.c_ulong()
+                ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                title_length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+                buf = ctypes.create_unicode_buffer(title_length + 1)
+                ctypes.windll.user32.GetWindowTextW(hwnd, buf, title_length + 1)
+                title = buf.value.strip().lower()
+                return pid.value, "", title
+            except Exception:
+                return None, "", ""
+
         if not sys.platform.startswith('linux'):
             return None, "", ""
 

@@ -95,7 +95,7 @@ wheels = [
 
 [[package]]
 name = "cloudannotation"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "annoy" },
@@ -105,7 +105,9 @@ dependencies = [
     { name = "pandas" },
     { name = "pillow" },
     { name = "plyfile" },
+    { name = "pynput" },
     { name = "pyquaternion" },
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "scikit-learn" },
     { name = "scipy" },
     { name = "tqdm" },
@@ -114,13 +116,13 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "open3d" },
-    { name = "pptk" },
+    { name = "pptk", marker = "sys_platform == 'linux'" },
 ]
 open3d = [
     { name = "open3d" },
 ]
 pptk = [
-    { name = "pptk" },
+    { name = "pptk", marker = "sys_platform == 'linux'" },
 ]
 
 [package.metadata]
@@ -134,9 +136,11 @@ requires-dist = [
     { name = "pandas", specifier = ">=1.1.5" },
     { name = "pillow", specifier = ">=8.4.0" },
     { name = "plyfile", specifier = ">=0.8" },
-    { name = "pptk", marker = "extra == 'all'", url = "https://github.com/ChadLin9596/pptk/releases/download/v0.1.1/pptk-0.1.1-cp38-none-manylinux_2_35_x86_64.whl" },
-    { name = "pptk", marker = "extra == 'pptk'", url = "https://github.com/ChadLin9596/pptk/releases/download/v0.1.1/pptk-0.1.1-cp38-none-manylinux_2_35_x86_64.whl" },
+    { name = "pptk", marker = "sys_platform == 'linux' and extra == 'all'", url = "https://github.com/ChadLin9596/pptk/releases/download/v0.1.1/pptk-0.1.1-cp38-none-manylinux_2_35_x86_64.whl" },
+    { name = "pptk", marker = "sys_platform == 'linux' and extra == 'pptk'", url = "https://github.com/ChadLin9596/pptk/releases/download/v0.1.1/pptk-0.1.1-cp38-none-manylinux_2_35_x86_64.whl" },
+    { name = "pynput", specifier = ">=1.7.6" },
     { name = "pyquaternion", specifier = ">=0.9.9" },
+    { name = "pywin32", marker = "sys_platform == 'win32'", specifier = ">=306" },
     { name = "scikit-learn", specifier = ">=0.24.2" },
     { name = "scipy", specifier = ">=1.5.4" },
     { name = "tqdm", specifier = ">=4.60.0" },
@@ -214,6 +218,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/10/3c/0608ea83920ddbd27
 wheels = [
     { url = "https://files.pythonhosted.org/packages/71/ad/0a230dc6cd85bb38e7fe6acc9fbaeb19ddf16ababcb54038ae81128da591/dash-4.3.0-py3-none-any.whl", hash = "sha256:cbbe79a2bb1a5e46fbbbddc33f9f558419442c2d55cd12526078f489b5801cc0", size = 8445443, upload-time = "2026-06-19T14:55:59.024Z" },
 ]
+
+[[package]]
+name = "evdev"
+version = "1.9.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/63/fe/a17c106a1f4061ce83f04d14bcedcfb2c38c7793ea56bfb906a6fadae8cb/evdev-1.9.2.tar.gz", hash = "sha256:5d3278892ce1f92a74d6bf888cc8525d9f68af85dbe336c95d1c87fb8f423069", size = 33301, upload-time = "2025-05-01T19:53:47.69Z" }
 
 [[package]]
 name = "fastjsonschema"
@@ -687,6 +697,86 @@ wheels = [
 ]
 
 [[package]]
+name = "pynput"
+version = "1.8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "evdev", marker = "'linux' in sys_platform" },
+    { name = "pyobjc-framework-applicationservices", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'" },
+    { name = "python-xlib", marker = "'linux' in sys_platform" },
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/86/c6/e2d415610cfbc78308bee44218a46124aaa3301b1df08814df819b2254a1/pynput-1.8.2.tar.gz", hash = "sha256:f493c87157cd3861b4468f7f896857051762f44ed26f1b641e7cc5840a457087", size = 82818, upload-time = "2026-05-12T19:11:39.464Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6d/98/bbeb760852adb27f166ce1617f0e51aabb15f21b1e60ea703f2aed3c78ac/pynput-1.8.2-py2.py3-none-any.whl", hash = "sha256:8cc38cf13a6ab2749cb375678be8a0fd705d7ce49c8001ff5db4007a723bbef1", size = 92028, upload-time = "2026-05-12T19:11:37.89Z" },
+]
+
+[[package]]
+name = "pyobjc-core"
+version = "11.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/e9/0b85c81e2b441267bca707b5d89f56c2f02578ef8f3eafddf0e0c0b8848c/pyobjc_core-11.1.tar.gz", hash = "sha256:b63d4d90c5df7e762f34739b39cc55bc63dbcf9fb2fb3f2671e528488c7a87fe", size = 974602, upload-time = "2025-06-14T20:56:34.189Z" }
+
+[[package]]
+name = "pyobjc-framework-applicationservices"
+version = "10.3.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
+    { name = "pyobjc-framework-coretext" },
+    { name = "pyobjc-framework-quartz" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/78/a0/32cd02c3e5f0f740f86064a078278c180d3058c857b8425a5128866e3931/pyobjc_framework_applicationservices-10.3.2.tar.gz", hash = "sha256:2116c3854ac07c022268eebc7cb40ccba30727df78442e57e0280b5193c8183c", size = 183088, upload-time = "2024-11-30T15:26:58.283Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9a/de/7d36c974bb89727fbe3a6ef3f2afba4e1a89679c6d8b538b9406974f7fd1/pyobjc_framework_ApplicationServices-10.3.2-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:ae434e7812c82bf959efaa1f7592bd3bb2ea47ce4eb90e4106ff901d81ecb49c", size = 25856, upload-time = "2024-11-30T13:03:49.619Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/9d/e8e284650b7a6082a3e478eacb291c6025a82d709f1b7cb07c00ef23a410/pyobjc_framework_ApplicationServices-10.3.2-cp38-cp38-macosx_11_0_universal2.whl", hash = "sha256:3ba30d55f0c31066e20c850c3ddeef4e728805d1957e235d0dcec6cadd3d4b90", size = 31579, upload-time = "2024-11-30T13:04:20.522Z" },
+]
+
+[[package]]
+name = "pyobjc-framework-cocoa"
+version = "10.3.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/39/41/4f09a5e9a6769b4dafb293ea597ed693cc0def0e07867ad0a42664f530b6/pyobjc_framework_cocoa-10.3.2.tar.gz", hash = "sha256:673968e5435845bef969bfe374f31a1a6dc660c98608d2b84d5cae6eafa5c39d", size = 4942530, upload-time = "2024-11-30T15:30:27.244Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fc/6b/1167d2e926b29fa79680ba83028818af28ec97a91e84d849ab18a6b51342/pyobjc_framework_Cocoa-10.3.2-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:7faa448d2038ae0e0287a326d390002e744bb6470e45995e2dbd16c892e4495a", size = 284040, upload-time = "2024-11-30T13:18:57.955Z" },
+    { url = "https://files.pythonhosted.org/packages/41/df/b627ac079a11011f7a9e4ae5a3c358fc6540d0b51386d339e214a957a4aa/pyobjc_framework_Cocoa-10.3.2-cp38-cp38-macosx_11_0_universal2.whl", hash = "sha256:fcd53fee2be9708576617994b107aedc2c40824b648cd51e780e8399c0a447b6", size = 381813, upload-time = "2024-11-30T13:18:59.766Z" },
+]
+
+[[package]]
+name = "pyobjc-framework-coretext"
+version = "10.3.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
+    { name = "pyobjc-framework-quartz" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/24/8e/bb442edfeeada13d2c96796bd36e3dcc0b91ac5c1a6774c21c12b7498770/pyobjc_framework_coretext-10.3.2.tar.gz", hash = "sha256:b1184146c628ba59c21c59eaa8e12256118daf8823deb7fb12013ecdfbc7f578", size = 233780, upload-time = "2024-11-30T17:06:46.732Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d5/16/204bcf3544f099a910ca2da32b239e0856154f78784b69eee2c9fd9a590f/pyobjc_framework_CoreText-10.3.2-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:d39bb096d27707f905f305b820fc29e3b5d55d704a6fd9520398e295d4a2cce6", size = 24332, upload-time = "2024-11-30T13:40:12.984Z" },
+    { url = "https://files.pythonhosted.org/packages/81/9b/d3e6b9d6b1569b35836bc3a24a5697ff4d58935cc9e59b51d6a97e6736fc/pyobjc_framework_CoreText-10.3.2-cp38-cp38-macosx_11_0_universal2.whl", hash = "sha256:6834b003ffe652f0de92144a34b9ce2d4b000828df9c4d717be8bc955076b588", size = 30053, upload-time = "2024-11-30T13:40:14.255Z" },
+]
+
+[[package]]
+name = "pyobjc-framework-quartz"
+version = "10.3.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/eb/bd/d78c845a6f0640975e837d1d0f04d6bbd95bb88b77dcee22482144ac5ad0/pyobjc_framework_quartz-10.3.2.tar.gz", hash = "sha256:193e7752c93e2d1304f914e3a8c069f4b66de237376c5285ba7c72e9ee0e3b15", size = 3776754, upload-time = "2024-11-30T17:11:47.99Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2e/79/59963b2d9205695e5e3a0cbfbc5b225b687dc4fe111a1746707776e1f882/pyobjc_framework_Quartz-10.3.2-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:d3b55ec27cffff18d98d73694001a211ad4cdf717f7d8ad76235f845771d8b5d", size = 138020, upload-time = "2024-11-30T14:44:41.904Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/12/f31289e7a824284e4bddd79745460c376c416bc003125b4fe704f4a09691/pyobjc_framework_Quartz-10.3.2-cp38-cp38-macosx_11_0_universal2.whl", hash = "sha256:a58826db7e71de4654e5215b46f00f7825b17991078c9ba74ca729a4da024f82", size = 211696, upload-time = "2024-11-30T14:44:45.409Z" },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -717,6 +807,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
+]
+
+[[package]]
+name = "python-xlib"
+version = "0.33"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/86/f5/8c0653e5bb54e0cbdfe27bf32d41f27bc4e12faa8742778c17f2a71be2c0/python-xlib-0.33.tar.gz", hash = "sha256:55af7906a2c75ce6cb280a584776080602444f75815a7aff4d287bb2d7018b32", size = 269068, upload-time = "2022-12-25T18:53:00.824Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fc/b8/ff33610932e0ee81ae7f1269c890f697d56ff74b9f5b2ee5d9b7fa2c5355/python_xlib-0.33-py2.py3-none-any.whl", hash = "sha256:c3534038d42e0df2f1392a1b30a15a4ff5fdc2b86cfa94f072bf11b10a164398", size = 182185, upload-time = "2022-12-25T18:52:58.662Z" },
 ]
 
 [[package]]

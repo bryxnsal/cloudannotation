@@ -46,3 +46,11 @@ class BaseViewerAdapter(ABC):
     def set_selected_indices(self, indices: list) -> bool:
         """Highlight given relative indices in the viewport."""
         pass
+
+    def get_camera_parameters(self):
+        """Retrieve current viewer camera parameters if supported."""
+        return None
+
+    def set_camera_parameters(self, params) -> bool:
+        """Apply camera parameters if supported."""
+        return False
