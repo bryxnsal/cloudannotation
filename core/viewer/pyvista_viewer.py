@@ -284,6 +284,7 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
 
                 # Camera style: Trackball style provides smooth, natural rotation without horizontal distortion
                 plotter.enable_trackball_style()
+                plotter.enable_parallel_projection()
                 main_style = plotter.iren.interactor.GetInteractorStyle()
                 none_style = vtk.vtkInteractorStyle()
 
