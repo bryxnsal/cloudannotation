@@ -92,12 +92,54 @@ def main():
         import platform
         import shutil
         import subprocess
+        import os
 
         print("=" * 62)
         print("            CloudAnnotation (cdann) - System Info")
         print("=" * 62)
         print(f"OS:               {platform.system()} {platform.release()} ({platform.machine()})")
+
+        # Display server environment
+        session_type = os.environ.get('XDG_SESSION_TYPE', '')
+        disp_var = os.environ.get('DISPLAY', '')
+        wayland_var = os.environ.get('WAYLAND_DISPLAY', '')
+        disp_info = []
+        if session_type:
+            disp_info.append(session_type)
+        if disp_var:
+            disp_info.append(f"DISPLAY={disp_var}")
+        if wayland_var:
+            disp_info.append(f"WAYLAND={wayland_var}")
+        disp_str = " ".join(disp_info) if disp_info else "Headless / Unknown"
+        print(f"Display Server:   {disp_str}")
+
+        # CPU Cores
+        cpu_cores = os.cpu_count() or "Unknown"
+        print(f"CPU Cores:        {cpu_cores} logical threads")
+
+        # RAM info (Linux via /proc/meminfo or generic fallback)
+        ram_str = "Unknown"
+        if os.path.isfile('/proc/meminfo'):
+            try:
+                with open('/proc/meminfo') as f:
+                    meminfo = {line.split(':')[0]: int(line.split(':')[1].strip().split()[0]) for line in f}
+                    total_gb = meminfo.get('MemTotal', 0) / (1024 * 1024)
+                    avail_gb = meminfo.get('MemAvailable', 0) / (1024 * 1024)
+                    ram_str = f"{total_gb:.1f} GB total ({avail_gb:.1f} GB available)"
+            except Exception:
+                pass
+        print(f"RAM:              {ram_str}")
+
         print(f"Python:           {platform.python_version()} ({sys.executable})")
+
+        # Tkinter GUI status
+        try:
+            import tkinter
+            tk_ver = tkinter.TkVersion
+            tk_status = f"Tk {tk_ver} [OPERATIONAL]"
+        except Exception as e:
+            tk_status = f"Unavailable ({e})"
+        print(f"Tkinter GUI:      {tk_status}")
 
         try:
             import importlib.metadata as meta
@@ -105,6 +147,14 @@ def main():
         except Exception:
             cdann_ver = '0.3.0'
         print(f"cdann version:    {cdann_ver}")
+
+        # Default viewer determination
+        if sys.platform.startswith('win32'):
+            default_viewer = "vispy (Windows fallback: pyvista, open3d)"
+        else:
+            default_viewer = "pptk (Linux default; alternatives: --use-pyvista, --use-vispy, --use-open3d)"
+        print(f"Default Viewer:   {default_viewer}")
+
         print("-" * 62)
         print("3D Viewers & Core Dependencies:")
 
