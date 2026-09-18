@@ -57,6 +57,9 @@ if 'TCL_LIBRARY' not in os.environ or 'TK_LIBRARY' not in os.environ:
             break
 
 import argparse
+import platform
+import shutil
+import subprocess
 from genericpath import isdir, isfile
 from plyfile import PlyData
 import glob
@@ -89,11 +92,6 @@ def main():
     opt = parser.parse_args()
 
     if opt.sysinfo:
-        import platform
-        import shutil
-        import subprocess
-        import os
-
         print("=" * 62)
         print("            CloudAnnotation (cdann) - System Info")
         print("=" * 62)
