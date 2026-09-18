@@ -268,15 +268,22 @@ class Open3dViewerAdapter(BaseViewerAdapter):
                 pcd.colors = o3d.utility.Vector3dVector(initial_rgb)
                 vis.add_geometry(pcd)
 
-                # Restore initial camera perspective if available
+                # Initialize camera: restore previous state or set standard Z-up perspective matching PPTK
                 cam_to_apply = initial_camera_params or self._saved_view_params
-                if cam_to_apply is not None:
-                    try:
-                        view_ctrl = vis.get_view_control()
-                        if view_ctrl:
+                view_ctrl = vis.get_view_control()
+                if view_ctrl:
+                    if cam_to_apply is not None:
+                        try:
                             view_ctrl.convert_from_pinhole_camera_parameters(cam_to_apply, allow_arbitrary=True)
-                    except Exception as ce:
-                        print("Open3dViewer: Could not restore initial camera:", ce)
+                        except Exception as ce:
+                            print("Open3dViewer: Could not restore initial camera:", ce)
+                    else:
+                        # PPTK uses Z-up convention. Set standard Z-up and diagonal perspective in Open3D:
+                        try:
+                            view_ctrl.set_up([0.0, 0.0, 1.0])
+                            view_ctrl.set_front([-1.0, -1.0, 1.0])
+                        except Exception:
+                            pass
 
                 render_opt = vis.get_render_option()
                 if render_opt:
