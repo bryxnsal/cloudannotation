@@ -22,10 +22,44 @@ try:
         pass
     from vispy import scene
     from vispy.scene import visuals
+    from vispy.util import keys
 except ImportError:
     vispy = None
 
 from core.viewer.base_viewer import BaseViewerAdapter
+
+
+if vispy is not None:
+    class SmoothTurntableCamera(scene.TurntableCamera):
+        """TurntableCamera with calibrated, smooth pan sensitivity for Shift + Click (identical to PPTK)."""
+        pan_sensitivity = 0.25
+
+        def viewbox_mouse_event(self, event):
+            if event.handled or not self.interactive:
+                return
+
+            if event.type == 'mouse_move' and event.press_event is not None:
+                modifiers = event.mouse_event.modifiers
+                if 1 in event.buttons and keys.SHIFT in modifiers:
+                    p1 = event.mouse_event.press_event.pos
+                    p2 = event.mouse_event.pos
+                    norm = np.mean(self._viewbox.size)
+                    if self._event_value is None or len(self._event_value) == 2:
+                        self._event_value = self.center
+                    dist = (p1 - p2) / norm * self._scale_factor * self.pan_sensitivity
+                    dist[1] *= -1
+                    dx, dy, dz = self._dist_to_trans(dist)
+                    ff = self._flip_factors
+                    up, forward, right = self._get_dim_vectors()
+                    dx, dy, dz = right * dx + forward * dy + up * dz
+                    dx, dy, dz = ff[0] * dx, ff[1] * dy, dz * ff[2]
+                    c = self._event_value
+                    self.center = c[0] + dx, c[1] + dy, c[2] + dz
+                    return
+
+            super().viewbox_mouse_event(event)
+else:
+    SmoothTurntableCamera = None
 
 
 # Jet color palette anchors identical to PPTK default colormap
@@ -288,8 +322,9 @@ class VispyViewerAdapter(BaseViewerAdapter):
                 )
                 view = canvas.central_widget.add_view()
 
-                # Turntable camera matching PPTK
-                cam = view.camera = scene.TurntableCamera(
+                # Turntable camera matching PPTK with smooth pan sensitivity
+                cam_cls = SmoothTurntableCamera if SmoothTurntableCamera is not None else scene.TurntableCamera
+                cam = view.camera = cam_cls(
                     up='+z',
                     elevation=30.0,
                     azimuth=45.0,
