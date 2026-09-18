@@ -2,6 +2,7 @@
 Open3dViewerAdapter: Adapter for 3D point cloud visualization and interaction using Open3D.
 Runs an interactive VisualizerWithVertexSelection window.
 """
+import queue
 import threading
 import time
 import numpy as np
@@ -48,6 +49,7 @@ class Open3dViewerAdapter(BaseViewerAdapter):
     """
     Manages rendering, interaction, point picking and camera parameters using Open3D Visualizer.
     Provides 100% functional parity with PPTK viewer.
+    All OpenGL mutations are dispatched to the visualizer thread to avoid GLX / WGL BadAccess errors.
     """
     def __init__(self, camera_controller=None):
         super().__init__(camera_controller=camera_controller)
@@ -59,6 +61,7 @@ class Open3dViewerAdapter(BaseViewerAdapter):
         self._lock = threading.Lock()
         self._picked_indices = []
         self._saved_view_params = None
+        self._action_queue = queue.Queue()
 
     def is_ready(self) -> bool:
         """Return True if visualizer window is created and running."""
@@ -80,6 +83,32 @@ class Open3dViewerAdapter(BaseViewerAdapter):
             self._thread.join(timeout=1.0)
         self._thread = None
 
+    def _execute_on_vis_thread(self, func, timeout=5.0):
+        """
+        Execute a function on the visualizer thread (where OpenGL context is current).
+        Blocks until completion and returns the result, or raises on error/timeout.
+        """
+        if not self.is_ready():
+            return None
+        res_container = []
+        err_container = []
+        done_event = threading.Event()
+
+        def wrapper():
+            try:
+                res_container.append(func())
+            except Exception as ex:
+                err_container.append(ex)
+            finally:
+                done_event.set()
+
+        self._action_queue.put(wrapper)
+        if done_event.wait(timeout=timeout):
+            if err_container:
+                raise err_container[0]
+            return res_container[0] if res_container else None
+        return None
+
     def set_point_size(self, size: float) -> bool:
         """Update point size dynamically."""
         if size < 0.1:
@@ -89,14 +118,16 @@ class Open3dViewerAdapter(BaseViewerAdapter):
 
         self.point_size = pixel_size
         if self.is_ready():
-            with self._lock:
-                try:
-                    render_opt = self.vis.get_render_option()
-                    if render_opt:
-                        render_opt.point_size = float(self.point_size)
-                        return True
-                except Exception as e:
-                    print("Open3dViewer: Error setting point size:", e)
+            def action():
+                render_opt = self.vis.get_render_option()
+                if render_opt:
+                    render_opt.point_size = float(self.point_size)
+                    return True
+                return False
+            try:
+                return bool(self._execute_on_vis_thread(action, timeout=1.0))
+            except Exception as e:
+                print("Open3dViewer: Error setting point size:", e)
         return False
 
     def _get_colors(self, points_df, mask):
@@ -135,21 +166,26 @@ class Open3dViewerAdapter(BaseViewerAdapter):
         if not self.is_ready() or points_df is None or mask is None:
             return False
 
-        with self._lock:
-            try:
-                new_colors = self._get_colors(points_df, mask)
-                if self.pcd is not None and len(new_colors) == len(self.pcd.points):
-                    self.pcd.colors = o3d.utility.Vector3dVector(new_colors)
-                    self.vis.update_geometry(self.pcd)
-                    return True
-            except Exception as e:
-                print("Open3dViewer: Error updating attributes:", e)
-        return False
+        new_colors = self._get_colors(points_df, mask)
+
+        def action():
+            if self.pcd is not None and len(new_colors) == len(self.pcd.points):
+                self.pcd.colors = o3d.utility.Vector3dVector(new_colors)
+                self.vis.update_geometry(self.pcd)
+                return True
+            return False
+
+        try:
+            return bool(self._execute_on_vis_thread(action, timeout=3.0))
+        except Exception as e:
+            print("Open3dViewer: Error updating attributes:", e)
+            return False
 
     def render(self, points_df, mask, preserve_camera: bool = True) -> bool:
         """
         Load or replace point cloud geometry in Open3D viewport.
         Properly handles changing point counts (for Multi, Select, ROI) by recreating geometry buffers.
+        Executes on the visualizer thread to ensure OpenGL thread safety.
         """
         if points_df is None or mask is None:
             return False
@@ -168,48 +204,49 @@ class Open3dViewerAdapter(BaseViewerAdapter):
             self._start_visualizer(xyz, rgb, initial_camera_params=initial_cam)
             return True
 
-        with self._lock:
-            try:
-                # Capture camera before replacing geometry
-                view_ctrl = self.vis.get_view_control()
-                saved_cam = None
-                if preserve_camera and view_ctrl:
-                    saved_cam = view_ctrl.convert_to_pinhole_camera_parameters()
+        def action():
+            # Capture camera before replacing geometry
+            view_ctrl = self.vis.get_view_control()
+            saved_cam = None
+            if preserve_camera and view_ctrl:
+                saved_cam = view_ctrl.convert_to_pinhole_camera_parameters()
 
-                curr_len = len(self.pcd.points) if self.pcd is not None else 0
+            curr_len = len(self.pcd.points) if self.pcd is not None else 0
 
-                if curr_len != num_points:
-                    # Point count changed (e.g. Multi, Select ROI, All)
-                    # Open3D requires removing and re-adding geometry to resize vertex buffers
-                    if self.pcd is not None:
-                        self.vis.remove_geometry(self.pcd, reset_bounding_box=False)
+            if curr_len != num_points:
+                # Point count changed (e.g. Multi, Select ROI, All)
+                # Open3D requires removing and re-adding geometry to resize vertex buffers
+                if self.pcd is not None:
+                    self.vis.remove_geometry(self.pcd, reset_bounding_box=False)
 
-                    new_pcd = o3d.geometry.PointCloud()
-                    new_pcd.points = o3d.utility.Vector3dVector(xyz)
-                    new_pcd.colors = o3d.utility.Vector3dVector(rgb)
-                    self.pcd = new_pcd
-                    self.vis.add_geometry(self.pcd, reset_bounding_box=False)
-                else:
-                    # In-place update when point count is identical
-                    self.pcd.points = o3d.utility.Vector3dVector(xyz)
-                    self.pcd.colors = o3d.utility.Vector3dVector(rgb)
-                    self.vis.update_geometry(self.pcd)
+                new_pcd = o3d.geometry.PointCloud()
+                new_pcd.points = o3d.utility.Vector3dVector(xyz)
+                new_pcd.colors = o3d.utility.Vector3dVector(rgb)
+                self.pcd = new_pcd
+                self.vis.add_geometry(self.pcd, reset_bounding_box=False)
+            else:
+                # In-place update when point count is identical
+                self.pcd.points = o3d.utility.Vector3dVector(xyz)
+                self.pcd.colors = o3d.utility.Vector3dVector(rgb)
+                self.vis.update_geometry(self.pcd)
 
-                # Restore camera if captured
-                if preserve_camera and saved_cam and view_ctrl:
-                    view_ctrl.convert_from_pinhole_camera_parameters(saved_cam, allow_arbitrary=True)
+            # Restore camera if captured
+            if preserve_camera and saved_cam and view_ctrl:
+                view_ctrl.convert_from_pinhole_camera_parameters(saved_cam, allow_arbitrary=True)
 
-                render_opt = self.vis.get_render_option()
-                if render_opt:
-                    render_opt.point_size = float(self.point_size)
+            render_opt = self.vis.get_render_option()
+            if render_opt:
+                render_opt.point_size = float(self.point_size)
 
-                # Clear picked points on geometry replacement
-                self._picked_indices = []
+            # Clear picked points on geometry replacement
+            self._picked_indices = []
+            return True
 
-                return True
-            except Exception as e:
-                print("Open3dViewer: Error rendering geometry:", e)
-                return False
+        try:
+            return bool(self._execute_on_vis_thread(action, timeout=5.0))
+        except Exception as e:
+            print("Open3dViewer: Error rendering geometry:", e)
+            return False
 
     def _start_visualizer(self, initial_xyz, initial_rgb, initial_camera_params=None):
         """Create and launch Open3D visualizer in a background thread."""
@@ -249,6 +286,17 @@ class Open3dViewerAdapter(BaseViewerAdapter):
 
                 # Event loop
                 while self._is_running:
+                    # Drain and process queued OpenGL actions on this thread
+                    while not self._action_queue.empty():
+                        try:
+                            action = self._action_queue.get_nowait()
+                            action()
+                            self._action_queue.task_done()
+                        except queue.Empty:
+                            break
+                        except Exception as qe:
+                            print("Open3dViewer: Queued action error:", qe)
+
                     with self._lock:
                         if self.vis is None:
                             break
@@ -284,46 +332,46 @@ class Open3dViewerAdapter(BaseViewerAdapter):
 
     def get_selected_indices(self) -> list:
         """Return list of point indices picked via Open3D selection tool."""
-        if not self.is_ready():
-            return []
         with self._lock:
-            try:
-                if self.vis is not None:
-                    picked = self.vis.get_picked_points()
-                    if picked:
-                        self._picked_indices = [int(p.index) for p in picked]
-                        return list(self._picked_indices)
-                return list(self._picked_indices)
-            except Exception as e:
-                return list(self._picked_indices)
+            return list(self._picked_indices)
 
     def set_selected_indices(self, indices: list) -> bool:
         """Clear or highlight picked points."""
         if not self.is_ready():
             return False
-        with self._lock:
-            try:
-                self._picked_indices = list(indices) if indices else []
-                if self.vis is not None:
-                    self.vis.clear_picked_points()
-                    if indices and hasattr(self.vis, 'add_picked_points'):
-                        self.vis.add_picked_points(indices)
-                return True
-            except Exception:
-                return False
+
+        def action():
+            self._picked_indices = list(indices) if indices else []
+            if self.vis is not None:
+                self.vis.clear_picked_points()
+                if indices and hasattr(self.vis, 'add_picked_points'):
+                    self.vis.add_picked_points(indices)
+            return True
+
+        try:
+            return bool(self._execute_on_vis_thread(action, timeout=1.0))
+        except Exception:
+            return False
 
     def get_camera_parameters(self):
         """Capture pinhole camera parameters from Open3D view control."""
-        if self.is_ready():
-            with self._lock:
-                try:
-                    view_ctrl = self.vis.get_view_control()
-                    if view_ctrl:
-                        cam = view_ctrl.convert_to_pinhole_camera_parameters()
-                        self._saved_view_params = cam
-                        return cam
-                except Exception as e:
-                    print("Open3dViewer: Error capturing camera parameters:", e)
+        if not self.is_ready():
+            return self._saved_view_params
+
+        def action():
+            view_ctrl = self.vis.get_view_control()
+            if view_ctrl:
+                cam = view_ctrl.convert_to_pinhole_camera_parameters()
+                self._saved_view_params = cam
+                return cam
+            return None
+
+        try:
+            res = self._execute_on_vis_thread(action, timeout=1.0)
+            if res is not None:
+                return res
+        except Exception as e:
+            print("Open3dViewer: Error capturing camera parameters:", e)
         return self._saved_view_params
 
     def set_camera_parameters(self, params) -> bool:
@@ -331,12 +379,18 @@ class Open3dViewerAdapter(BaseViewerAdapter):
         if params is None:
             return False
         self._saved_view_params = params
-        if self.is_ready():
-            with self._lock:
-                try:
-                    view_ctrl = self.vis.get_view_control()
-                    if view_ctrl:
-                        return bool(view_ctrl.convert_from_pinhole_camera_parameters(params, allow_arbitrary=True))
-                except Exception as e:
-                    print("Open3dViewer: Error setting camera parameters:", e)
+        if not self.is_ready():
+            return False
+
+        def action():
+            view_ctrl = self.vis.get_view_control()
+            if view_ctrl:
+                return bool(view_ctrl.convert_from_pinhole_camera_parameters(params, allow_arbitrary=True))
+            return False
+
+        try:
+            return bool(self._execute_on_vis_thread(action, timeout=1.0))
+        except Exception as e:
+            print("Open3dViewer: Error setting camera parameters:", e)
         return False
+
