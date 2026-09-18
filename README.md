@@ -22,8 +22,8 @@ uv python install 3.8
 git clone https://github.com/bryxnsal/cloudannotation.git
 cd cloudannotation
 
-# 3. Instalar globalmente el CLI como cdann
-uv tool install --python 3.8 ".[all]"
+# 3. Instalar globalmente el CLI como cdann (en modo editable)
+uv tool install --python 3.8 -e ".[all]"
 ```
 
 ### Opciones de instalación:
@@ -32,11 +32,11 @@ Puedes instalar las dependencias según el visor 3D que prefieras utilizar:
 
 | Opción | Comando | Descripción |
 | :--- | :--- | :--- |
-| **Completa** | `uv tool install --python 3.8 --force ".[all]"` | Instala todos los visores (**PyVista**, **VisPy**, **PPTK**, **Open3D**). |
-| **PyVista** | `uv tool install --python 3.8 --force ".[pyvista]"` | Visor PyVista / VTK. |
-| **VisPy** | `uv tool install --python 3.8 --force ".[vispy]"` | Visor VisPy OpenGL. |
-| **PPTK** | `uv tool install --python 3.8 --force ".[pptk]"` | Visor nativo PPTK (Linux x86_64). |
-| **Open3D** | `uv tool install --python 3.8 --force ".[open3d]"` | Visor Open3D. |
+| **Completa** | `uv tool install --python 3.8 --reinstall -e ".[all]"` | Instala todos los visores (**PyVista**, **VisPy**, **PPTK**, **Open3D**). |
+| **PyVista** | `uv tool install --python 3.8 --reinstall -e ".[pyvista]"` | Visor PyVista / VTK. |
+| **VisPy** | `uv tool install --python 3.8 --reinstall -e ".[vispy]"` | Visor VisPy OpenGL. |
+| **PPTK** | `uv tool install --python 3.8 --reinstall -e ".[pptk]"` | Visor nativo PPTK (Linux x86_64). |
+| **Open3D** | `uv tool install --python 3.8 --reinstall -e ".[open3d]"` | Visor Open3D. |
 
 > [!NOTE]
 > El wheel de PPTK está fijado por URL y SHA-256 en `pyproject.toml`, garantizando una instalación segura sin descargas de repositorios desconocidos.
@@ -48,7 +48,7 @@ Si ya tienes instalada la herramienta y deseas actualizar a la última versión 
 ```bash
 cd cloudannotation
 git pull
-uv tool install --python 3.8 --force ".[all]"
+uv tool install --python 3.8 --reinstall -e ".[all]"
 ```
 
 *(Si utilizas solo un visor específico, reemplaza `".[all]"` por `".[pptk]"` o `".[open3d]"`).*
