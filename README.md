@@ -3,7 +3,7 @@
 **CloudAnnotation** (`cdann`) es una herramienta interactiva de alto rendimiento para la visualización, inspección, segmentación y etiquetado manual/asistido de nubes de puntos 3D (`.ply`, `.las`, `.pcd`).
 
 Diseñada para flujos de trabajo de ingeniería, topografía y visión computacional (LiDAR/fotogrametría), ofrece:
-- **Doble soporte de visores 3D**: Visor nativo acelerado **PPTK** y visor moderno **Open3D**.
+- **Triple soporte de visores 3D**: Visor nativo **PPTK**, visor acelerado **VisPy** (con cámara Turntable idéntica a PPTK y selección rectangular OpenGL fluida), y visor **Open3D**.
 - **Etiquetado ágil y atajos directos**: Clasifica puntos seleccionados con un solo clic o atajo de teclado (`1`-`9`, `Q`-`O`, o combinaciones personalizadas de 1 a 3 teclas) tanto desde la GUI como directamente dentro de la ventana 3D.
 - **Historial completo de Undo/Redo**: Deshaz (`Ctrl+Z`) y rehaz (`Ctrl+Y`) acciones de clasificación al instante sin perder selecciones ni orientación de cámara.
 - **Control de cámara y áreas de trabajo**: Preservación permanente de perspectiva, aislamiento de regiones de interés (ROI) con `Select` e inversión de selecciones con `Select Inv`.
@@ -34,9 +34,10 @@ Puedes instalar las dependencias según el visor 3D que prefieras utilizar:
 
 | Opción | Comando | Descripción |
 | :--- | :--- | :--- |
-| **Completa (Recomendada)** | `uv tool install --force ".[all]"` | Instala **PPTK** y **Open3D** juntos. Permite alternar entre ambos visores libremente. |
-| **Solo PPTK** | `uv tool install --force ".[pptk]"` | Instala el visor nativo de alto rendimiento PPTK (ideal para Linux x86_64). |
-| **Solo Open3D** | `uv tool install --force ".[open3d]"` | Instala el visor moderno Open3D (ideal si tu plataforma no soporta PPTK). |
+| **Completa (Recomendada)** | `uv tool install --force ".[all]"` | Instala **PPTK**, **VisPy** y **Open3D** juntos. Permite alternar entre todos libremente. |
+| **VisPy (Turntable + OpenGL)** | `uv tool install --force ".[vispy]"` | Instala **VisPy** con cámara orbital $+Z$ y selección por caja idéntica a PPTK (100% multiplataforma). |
+| **Solo PPTK** | `uv tool install --force ".[pptk]"` | Instala el visor nativo PPTK (ideal para Linux x86_64). |
+| **Solo Open3D** | `uv tool install --force ".[open3d]"` | Instala el visor Open3D. |
 
 > [!NOTE]
 > El wheel de PPTK está fijado por URL y SHA-256 en `pyproject.toml`, garantizando una instalación segura sin descargas de repositorios desconocidos.

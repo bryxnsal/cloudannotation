@@ -81,7 +81,8 @@ def main():
     parser.add_argument("--render", dest="render", action="store_true")
     parser.add_argument("--no-render", dest="render", action="store_false")
     parser.add_argument("--use-open3d", dest="use_open3d", action="store_true", help="Use Open3D as 3D visualizer instead of PPTK")
-    parser.set_defaults(render=True, r=False, labels=14, use_open3d=False)
+    parser.add_argument("--use-vispy", dest="use_vispy", action="store_true", help="Use VisPy (OpenGL Turntable) as 3D visualizer instead of PPTK")
+    parser.set_defaults(render=True, r=False, labels=14, use_open3d=False, use_vispy=False)
 
     opt = parser.parse_args()
 
@@ -128,8 +129,16 @@ def main():
 
     command_queue = queue.Queue()
 
-    # On Windows or when explicitly requested, use Open3D as the 3D visualizer
-    chosen_viewer = 'open3d' if (opt.use_open3d or sys.platform.startswith('win32')) else 'pptk'
+    # Determine 3D viewer engine: VisPy > Open3D > PPTK (with Windows defaulting to VisPy/Open3D)
+    if opt.use_vispy:
+        chosen_viewer = 'vispy'
+    elif opt.use_open3d:
+        chosen_viewer = 'open3d'
+    elif sys.platform.startswith('win32'):
+        # On Windows PPTK binary wheel is unavailable; prefer VisPy if available, fallback to Open3D
+        chosen_viewer = 'vispy'
+    else:
+        chosen_viewer = 'pptk'
 
     pc = PointCloud(
         opt_file,
