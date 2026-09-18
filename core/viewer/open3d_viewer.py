@@ -10,39 +10,43 @@ import open3d as o3d
 from core.viewer.base_viewer import BaseViewerAdapter
 
 
-# Default palette matching standard PPTK colormapping behavior for classes
-def _get_class_colormap(classes: np.ndarray, max_label: int = 25) -> np.ndarray:
-    """
-    Generate distinct RGB colors in [0, 1] for class IDs, identical to PPTK scalar colormap.
-    Class 0 (unclassified) is assigned neutral gray [0.7, 0.7, 0.7].
-    Classes >= 1 are mapped across the standard colormap spectrum.
-    """
-    try:
-        import matplotlib.pyplot as plt
-        cmap = plt.get_cmap('tab20')
-        palette = np.array([cmap(i)[:3] for i in range(20)], dtype=np.float64)
-    except Exception:
-        palette = np.array([
-            [0.12, 0.46, 0.70], [0.68, 0.78, 0.90], [1.00, 0.49, 0.05], [1.00, 0.73, 0.47],
-            [0.17, 0.62, 0.17], [0.59, 0.87, 0.54], [0.83, 0.15, 0.15], [1.00, 0.59, 0.58],
-            [0.58, 0.40, 0.74], [0.77, 0.69, 0.83], [0.54, 0.33, 0.29], [0.77, 0.61, 0.58],
-            [0.89, 0.46, 0.76], [0.96, 0.71, 0.82], [0.49, 0.49, 0.49], [0.78, 0.78, 0.78],
-            [0.73, 0.74, 0.13], [0.85, 0.86, 0.54], [0.09, 0.74, 0.81], [0.61, 0.85, 0.89],
-        ], dtype=np.float64)
+# Jet color palette anchors identical to PPTK default colormap
+_PPTK_JET_ANCHORS = np.array([
+    [0.0, 0.0, 1.0],  # Blue
+    [0.0, 1.0, 1.0],  # Cyan
+    [0.0, 1.0, 0.0],  # Green
+    [1.0, 1.0, 0.0],  # Yellow
+    [1.0, 0.0, 0.0],  # Red
+], dtype=np.float64)
 
+
+def _get_class_colormap(classes: np.ndarray, max_label: int = None) -> np.ndarray:
+    """
+    Generate distinct RGB colors in [0, 1] for class IDs, identical to PPTK scalar colormap ('jet').
+    Class 0 (unclassified) is assigned neutral gray [0.7, 0.7, 0.7].
+    Classes >= 1 are mapped across PPTK's default 'jet' colormap scale.
+    """
     num_pts = len(classes)
     colors = np.zeros((num_pts, 3), dtype=np.float64)
 
-    # Base neutral color for class 0 (unclassified)
     is_zero = (classes == 0)
     colors[is_zero] = [0.7, 0.7, 0.7]
 
     non_zero = ~is_zero
     if np.any(non_zero):
-        c_indices = (classes[non_zero].astype(int) - 1) % len(palette)
-        colors[non_zero] = palette[c_indices]
+        vals = classes[non_zero].astype(np.float64)
+        vmin = 1.0
+        vmax = float(max_label) if max_label is not None else float(np.max(vals))
+        if vmax <= vmin:
+            colors[non_zero] = _PPTK_JET_ANCHORS[0]
+        else:
+            t = np.clip((vals - vmin) / (vmax - vmin), 0.0, 1.0) * 4.0
+            idx = np.clip(np.floor(t).astype(int), 0, 3)
+            frac = (t - idx)[:, None]
+            colors[non_zero] = (1.0 - frac) * _PPTK_JET_ANCHORS[idx] + frac * _PPTK_JET_ANCHORS[idx + 1]
 
     return colors
+
 
 
 class Open3dViewerAdapter(BaseViewerAdapter):
@@ -237,6 +241,8 @@ class Open3dViewerAdapter(BaseViewerAdapter):
             render_opt = self.vis.get_render_option()
             if render_opt:
                 render_opt.point_size = float(self.point_size)
+                render_opt.point_color_option = o3d.visualization.PointColorOption.Color
+                render_opt.light_on = False
 
             # Clear picked points on geometry replacement
             self._picked_indices = []
@@ -276,6 +282,8 @@ class Open3dViewerAdapter(BaseViewerAdapter):
                 if render_opt:
                     render_opt.point_size = float(self.point_size)
                     render_opt.background_color = np.array([0.1, 0.1, 0.1])
+                    render_opt.point_color_option = o3d.visualization.PointColorOption.Color
+                    render_opt.light_on = False
 
                 with self._lock:
                     self.vis = vis
