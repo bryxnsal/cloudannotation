@@ -215,24 +215,19 @@ class Open3dViewerAdapter(BaseViewerAdapter):
             if preserve_camera and view_ctrl:
                 saved_cam = view_ctrl.convert_to_pinhole_camera_parameters()
 
-            curr_len = len(self.pcd.points) if self.pcd is not None else 0
+            # Always replace geometry in Visualizer to guarantee full vertex buffer refresh
+            if self.pcd is not None:
+                try:
+                    self.vis.clear_picked_points()
+                except Exception:
+                    pass
+                self.vis.remove_geometry(self.pcd, reset_bounding_box=False)
 
-            if curr_len != num_points:
-                # Point count changed (e.g. Multi, Select ROI, All)
-                # Open3D requires removing and re-adding geometry to resize vertex buffers
-                if self.pcd is not None:
-                    self.vis.remove_geometry(self.pcd, reset_bounding_box=False)
-
-                new_pcd = o3d.geometry.PointCloud()
-                new_pcd.points = o3d.utility.Vector3dVector(xyz)
-                new_pcd.colors = o3d.utility.Vector3dVector(rgb)
-                self.pcd = new_pcd
-                self.vis.add_geometry(self.pcd, reset_bounding_box=False)
-            else:
-                # In-place update when point count is identical
-                self.pcd.points = o3d.utility.Vector3dVector(xyz)
-                self.pcd.colors = o3d.utility.Vector3dVector(rgb)
-                self.vis.update_geometry(self.pcd)
+            new_pcd = o3d.geometry.PointCloud()
+            new_pcd.points = o3d.utility.Vector3dVector(xyz)
+            new_pcd.colors = o3d.utility.Vector3dVector(rgb)
+            self.pcd = new_pcd
+            self.vis.add_geometry(self.pcd, reset_bounding_box=False)
 
             # Restore camera if captured
             if preserve_camera and saved_cam and view_ctrl:
