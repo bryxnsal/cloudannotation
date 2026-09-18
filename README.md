@@ -3,7 +3,11 @@
 **CloudAnnotation** (`cdann`) es una herramienta interactiva de alto rendimiento para la visualización, inspección, segmentación y etiquetado manual/asistido de nubes de puntos 3D (`.ply`, `.las`, `.pcd`).
 
 Diseñada para flujos de trabajo de ingeniería, topografía y visión computacional (LiDAR/fotogrametría), ofrece:
-- **Triple soporte de visores 3D**: Visor nativo **PPTK**, visor acelerado **VisPy** (con cámara Turntable idéntica a PPTK y selección rectangular OpenGL fluida), y visor **Open3D**.
+- **Soporte para 4 visores 3D de alto rendimiento**:
+  - **PyVista (VTK)**: Cámara Trackball natural con ejes de orientación en esquina, selección rectangular acumulativa (`Ctrl + Arrastre`) y deselección sustractiva (`Ctrl + Shift + Arrastre`).
+  - **VisPy (OpenGL)**: Cámara Turntable idéntica a PPTK, actualización instantánea por VBO en GPU y selección rectangular fluida (`Ctrl + Arrastre`).
+  - **PPTK**: Visor nativo con vistas numéricas (`1`, `3`, `7`), proyección ortogonal/perspectiva (`5`) y selección por caja.
+  - **Open3D**: Visor basado en `VisualizerWithVertexSelection` y atajos nativos.
 - **Etiquetado ágil y atajos directos**: Clasifica puntos seleccionados con un solo clic o atajo de teclado (`1`-`9`, `Q`-`O`, o combinaciones personalizadas de 1 a 3 teclas) tanto desde la GUI como directamente dentro de la ventana 3D.
 - **Historial completo de Undo/Redo**: Deshaz (`Ctrl+Z`) y rehaz (`Ctrl+Y`) acciones de clasificación al instante sin perder selecciones ni orientación de cámara.
 - **Control de cámara y áreas de trabajo**: Preservación permanente de perspectiva, aislamiento de regiones de interés (ROI) con `Select` e inversión de selecciones con `Select Inv`.
@@ -161,20 +165,56 @@ dataset/
 ```
 
 
-## Flujo de trabajo
+## Flujo de trabajo y Controles por Visor 3D
 
-**Combinaciones de Teclas:**
+Cada visor 3D implementa controles de cámara optimizados y herramientas de selección intuitivas:
 
-```
-- Clic Izquierdo        -- Rotar alrededor
-- Ctrl + Clic Izquierdo -- Seleccionar puntos dentro del rectangulo
-- Tecla 7               -- Vista superior (PPTK)
-- Tecla 5               -- Cambiar perpectiva (PPTK)
-- Tecla 3, 1            -- Vistas laterales (PPTK)
-```
+### 1. PyVista (VTK) — `--use-pyvista`
+*Visor de alta estabilidad con aceleración VTK por hardware, ejes XYZ interactivos en la esquina inferior izquierda y cámara Trackball:*
+- **Rotar cámara**: Clic Izquierdo + Arrastrar.
+- **Panorámica (Pan)**: Clic Derecho + Arrastrar o Clic con Rueda Central + Arrastrar.
+- **Zoom**: Rueda del ratón (Scroll) o `Shift` + Clic Derecho + Arrastrar.
+- **Selección rectangular aditiva**: `Ctrl` + Clic Izquierdo + Arrastrar (dibuja recuadro amarillo; acumula puntos a la selección actual).
+- **Deselección rectangular sustractiva**: `Ctrl` + `Shift` + Clic Izquierdo + Arrastrar (dibuja recuadro rojo; deselecciona los puntos dentro del área).
+- **Limpiar selección**: Un Clic Izquierdo simple en el fondo o presionar la tecla `C`.
 
-**Atajos de Clasificación Contextuales (Directos en el Visor 3D y en la GUI):**
-Los atajos de teclado (`1`-`9`, `q`, `w`, `e`, etc.) funcionan **directamente dentro del visor 3D (PPTK u Open3D)** sin necesidad de hacer clic sobre la GUI:
+---
+
+### 2. VisPy (OpenGL) — `--use-vispy`
+*Visor ligero con shaders OpenGL puros y cámara Turntable de orientación fija $+Z$ (órbita idéntica a PPTK):*
+- **Rotar cámara (Turntable $+Z$)**: Clic Izquierdo + Arrastrar.
+- **Panorámica (Pan)**: Clic Derecho + Arrastrar.
+- **Zoom**: Rueda del ratón (Scroll).
+- **Selección rectangular**: `Ctrl` + Clic Izquierdo + Arrastrar (rectángulo delimitador en pantalla).
+- **Limpiar selección**: Clic simple sin arrastrar o presionar la tecla `C`.
+
+---
+
+### 3. PPTK — Visor por defecto en Linux
+*Visor especializado en grandes volúmenes de puntos LiDAR:*
+- **Rotar cámara**: Clic Izquierdo + Arrastrar.
+- **Panorámica (Pan)**: Clic Central (o Clic Derecho según configuración) + Arrastrar.
+- **Zoom**: Rueda del ratón (Scroll).
+- **Seleccionar puntos**: `Ctrl` + Clic Izquierdo + Arrastrar (selección por caja).
+- **Vistas ortogonales rápidas**:
+  - `Tecla 7`: Vista superior (Top view).
+  - `Tecla 1`: Vista frontal.
+  - `Tecla 3`: Vista lateral.
+  - `Tecla 5`: Alternar entre proyección perspectiva y paralela (ortográfica).
+
+---
+
+### 4. Open3D — `--use-open3d`
+*Visor estándar de visión 3D basado en `VisualizerWithVertexSelection`:*
+- **Rotar cámara**: Clic Izquierdo + Arrastrar.
+- **Panorámica (Pan)**: `Ctrl` + Clic Izquierdo + Arrastrar o Clic con la Rueda Central.
+- **Zoom**: Rueda del ratón (Scroll).
+- **Seleccionar vértices/puntos**: `Ctrl` + Clic Izquierdo o `Shift` + Clic Izquierdo (según modo de selección de Open3D).
+
+---
+
+### Atajos de Clasificación Contextuales (Directos en el Visor 3D y en la GUI)
+Los atajos de teclado (`1`-`9`, `Q`-`O`, etc.) funcionan **directamente dentro de la ventana del visor 3D** sin necesidad de hacer clic sobre la GUI:
 - **Con puntos seleccionados (`Ctrl + Drag`)**: Al presionar una tecla de atajo (ej. `1` para *Suelo*, `2` para *Vegetación*, o letras configuradas), los puntos seleccionados se clasifican y colorean inmediatamente.
 - **Sin puntos seleccionados en PPTK**: Las teclas `1`-`9` preservan su comportamiento nativo de cámara (Superior, Frontal, Lateral, etc.), mientras que las teclas alfabéticas o el panel GUI seleccionan la clase activa.
 - **Personalización**: Puedes reasignar o activar/desactivar cualquier atajo pulsando el botón **"Shortcuts"** en la GUI.
@@ -266,7 +306,7 @@ pc.write('road_labeled.ply',overwrite=True)
 
 ## Sistema de Atajos de Teclado (Shortcuts)
 
-Los atajos de teclado funcionan **tanto dentro de la ventana de la GUI como directamente dentro de los visores 3D (PPTK u Open3D)** sin necesidad de alternar el foco con el ratón. Se configuran desde el botón **"Shortcuts"** en la sección `[CLASS]`.
+Los atajos de teclado funcionan **tanto dentro de la ventana de la GUI como directamente dentro de los visores 3D (PyVista, VisPy, PPTK u Open3D)** sin necesidad de alternar el foco con el ratón. Se configuran desde el botón **"Shortcuts"** en la sección `[CLASS]`.
 
 La configuración personalizada se guarda automáticamente en:
 ```bash
