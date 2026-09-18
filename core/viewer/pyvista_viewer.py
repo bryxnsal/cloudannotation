@@ -285,6 +285,9 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
                 # Camera style: Terrain style fixes +Z as up vector (smooth azim/elev orbital navigation)
                 plotter.enable_terrain_style(mouse_wheel_zooms=True, shift_pans=True)
 
+                # Parallel (orthographic) projection: eliminates perspective distortion and dizziness
+                plotter.enable_parallel_projection()
+
                 self._current_xyz = initial_xyz
                 self._current_colors = initial_rgb
                 self._picked_indices = []
