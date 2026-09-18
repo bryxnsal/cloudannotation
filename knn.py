@@ -7,7 +7,6 @@ except (ImportError, OSError):
     HAS_PPTK = False
 
 from scipy.spatial import KDTree
-from annoy import AnnoyIndex
 import numpy as np
 
 
@@ -17,16 +16,12 @@ class Query:
         self.pptk_n = 0
         self.scipy_index = None
         self.scipy_n = 0
-        self.annoy_index = None
-        self.annoy_n = 0
 
     def __len__(self):
         if self.pptk_n:
             return self.pptk_n
         elif self.scipy_n:
             return self.scipy_n
-        elif self.annoy_n:
-            return self.annoy_n
         else:
             return 0
 
@@ -37,10 +32,6 @@ class Query:
     def delete_scipy(self):
         self.scipy_index = None
         self.scipy_n = 0
-
-    def delete_annoy(self):
-        self.annoy_index = None
-        self.annoy_n = 0
 
     def neighbors(self, query, k=100, radius=np.power(10, 10), distances=False, manhatten=False, approx=0.0):
         if self.pptk_index is not None:
@@ -56,11 +47,6 @@ class Query:
             else:
                 p = 2.0
             dists, neighbors = self.scipy_index.query(query, k, eps=approx, p=p, distance_upper_bound=radius)
-            mask = radius >= dists
-            neighbors, dists = neighbors[mask], dists[mask]
-        elif self.annoy_index is not None:
-            neighbors, dists = self.annoy_index.get_nns_by_vector(query, k, include_distances=True)  # search_k = n_trees * n
-            neighbors, dists = np.array(neighbors), np.array(dists)
             mask = radius >= dists
             neighbors, dists = neighbors[mask], dists[mask]
         elif self.voxel_index is not None:
@@ -96,12 +82,3 @@ class Query:
                 self.scipy(points, leaf_size * 10)
             else:
                 print('Building scipy index failed')
-
-    def annoy(self, points, trees=10):
-        if self.annoy_index is not None:
-            self.delete_annoy()
-        self.annoy_n = len(points)
-        self.annoy_index = AnnoyIndex(len(points[0]), metric='angular')
-        for i in range(self.annoy_n):
-            self.annoy_index.add_item(i, points[i])
-        self.annoy_index.build(trees)

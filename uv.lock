@@ -24,12 +24,6 @@ wheels = [
 ]
 
 [[package]]
-name = "annoy"
-version = "1.17.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/07/38/e321b0e05d8cc068a594279fb7c097efb1df66231c295d482d7ad51b6473/annoy-1.17.3.tar.gz", hash = "sha256:9cbfebefe0a5f843eba29c6be4c84d601f4f41ad4ded0486f1b88c3b07739c15", size = 647460, upload-time = "2023-06-14T16:37:34.152Z" }
-
-[[package]]
 name = "attrs"
 version = "25.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -98,7 +92,6 @@ name = "cloudannotation"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
-    { name = "annoy" },
     { name = "laspy" },
     { name = "matplotlib" },
     { name = "numpy" },
@@ -127,7 +120,6 @@ pptk = [
 
 [package.metadata]
 requires-dist = [
-    { name = "annoy", specifier = ">=1.17.0" },
     { name = "laspy", specifier = ">=2.0.0" },
     { name = "matplotlib", specifier = ">=3.3.0" },
     { name = "numpy", specifier = ">=1.19.5,<2.0.0" },
