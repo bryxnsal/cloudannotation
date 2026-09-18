@@ -82,7 +82,8 @@ def main():
     parser.add_argument("--no-render", dest="render", action="store_false")
     parser.add_argument("--use-open3d", dest="use_open3d", action="store_true", help="Use Open3D as 3D visualizer instead of PPTK")
     parser.add_argument("--use-vispy", dest="use_vispy", action="store_true", help="Use VisPy (OpenGL Turntable) as 3D visualizer instead of PPTK")
-    parser.set_defaults(render=True, r=False, labels=14, use_open3d=False, use_vispy=False)
+    parser.add_argument("--use-pyvista", dest="use_pyvista", action="store_true", help="Use PyVista (VTK Terrain) as 3D visualizer instead of PPTK")
+    parser.set_defaults(render=True, r=False, labels=14, use_open3d=False, use_vispy=False, use_pyvista=False)
 
     opt = parser.parse_args()
 
@@ -129,13 +130,15 @@ def main():
 
     command_queue = queue.Queue()
 
-    # Determine 3D viewer engine: VisPy > Open3D > PPTK (with Windows defaulting to VisPy/Open3D)
-    if opt.use_vispy:
+    # Determine 3D viewer engine: PyVista > VisPy > Open3D > PPTK (with Windows defaulting to VisPy/PyVista)
+    if opt.use_pyvista:
+        chosen_viewer = 'pyvista'
+    elif opt.use_vispy:
         chosen_viewer = 'vispy'
     elif opt.use_open3d:
         chosen_viewer = 'open3d'
     elif sys.platform.startswith('win32'):
-        # On Windows PPTK binary wheel is unavailable; prefer VisPy if available, fallback to Open3D
+        # On Windows PPTK binary wheel is unavailable; prefer VisPy/PyVista
         chosen_viewer = 'vispy'
     else:
         chosen_viewer = 'pptk'

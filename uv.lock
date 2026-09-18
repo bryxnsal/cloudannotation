@@ -112,13 +112,19 @@ all = [
     { name = "open3d" },
     { name = "pptk", marker = "sys_platform == 'linux'" },
     { name = "pyqt5" },
+    { name = "pyvista" },
     { name = "vispy" },
+    { name = "vtk" },
 ]
 open3d = [
     { name = "open3d" },
 ]
 pptk = [
     { name = "pptk", marker = "sys_platform == 'linux'" },
+]
+pyvista = [
+    { name = "pyvista" },
+    { name = "vtk" },
 ]
 vispy = [
     { name = "glfw" },
@@ -144,14 +150,18 @@ requires-dist = [
     { name = "pyqt5", marker = "extra == 'all'", specifier = ">=5.15.0" },
     { name = "pyqt5", marker = "extra == 'vispy'", specifier = ">=5.15.0" },
     { name = "pyquaternion", specifier = ">=0.9.9" },
+    { name = "pyvista", marker = "extra == 'all'", specifier = ">=0.43.0" },
+    { name = "pyvista", marker = "extra == 'pyvista'", specifier = ">=0.43.0" },
     { name = "pywin32", marker = "sys_platform == 'win32'", specifier = ">=306" },
     { name = "scikit-learn", specifier = ">=0.24.2" },
     { name = "scipy", specifier = ">=1.5.4" },
     { name = "tqdm", specifier = ">=4.60.0" },
     { name = "vispy", marker = "extra == 'all'", specifier = ">=0.14.0" },
     { name = "vispy", marker = "extra == 'vispy'", specifier = ">=0.14.0" },
+    { name = "vtk", marker = "extra == 'all'", specifier = ">=9.2.0" },
+    { name = "vtk", marker = "extra == 'pyvista'", specifier = ">=9.2.0" },
 ]
-provides-extras = ["pptk", "open3d", "vispy", "all"]
+provides-extras = ["pptk", "open3d", "vispy", "pyvista", "all"]
 
 [[package]]
 name = "colorama"
@@ -690,6 +700,20 @@ wheels = [
 ]
 
 [[package]]
+name = "pooch"
+version = "1.8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "platformdirs" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c6/77/b3d3e00c696c16cf99af81ef7b1f5fe73bd2a307abca41bd7605429fe6e5/pooch-1.8.2.tar.gz", hash = "sha256:76561f0de68a01da4df6af38e9955c4c9d1a5c90da73f7e40276a5728ec83d10", size = 59353, upload-time = "2024-06-06T16:53:46.224Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a8/87/77cc11c7a9ea9fd05503def69e3d18605852cd0d4b0d3b8f15bbeb3ef1d1/pooch-1.8.2-py3-none-any.whl", hash = "sha256:3529a57096f7198778a5ceefd5ac3ef0e4d06a6ddaf9fc2d609b806f25302c47", size = 64574, upload-time = "2024-06-06T16:53:44.343Z" },
+]
+
+[[package]]
 name = "pptk"
 version = "0.1.1"
 source = { url = "https://github.com/ChadLin9596/pptk/releases/download/v0.1.1/pptk-0.1.1-cp38-none-manylinux_2_35_x86_64.whl" }
@@ -915,6 +939,24 @@ wheels = [
 ]
 
 [[package]]
+name = "pyvista"
+version = "0.44.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "pooch" },
+    { name = "scooby" },
+    { name = "typing-extensions" },
+    { name = "vtk" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/56/01/a7ebede7d5c0bb3b895a7d6afd4d51f0aa328b50ba93d8bc72eb0fb5856b/pyvista-0.44.2.tar.gz", hash = "sha256:db65943c3c1c9ba49fe16f5a25a5bc23b74bf1ea7a38aae4ef9c4dc5838ccf5e", size = 2192634, upload-time = "2024-11-27T00:06:14.034Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/65/07/699a032f8b5a1b70c9681185541f18523936a76ac5846e93c5eaaa1e2f33/pyvista-0.44.2-py3-none-any.whl", hash = "sha256:8530d35f57cdaa33507ac9aec19e3292be0bc9026b28e4f12df7e8054438d028", size = 2244442, upload-time = "2024-11-27T00:06:11.761Z" },
+]
+
+[[package]]
 name = "pywin32"
 version = "311"
 source = { registry = "https://pypi.org/simple" }
@@ -1032,6 +1074,15 @@ wheels = [
 ]
 
 [[package]]
+name = "scooby"
+version = "0.11.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d1/d1/a28f3be1503a9c474a4878424bbeb93a55a2ec7d0cb66559aa258e690aea/scooby-0.11.0.tar.gz", hash = "sha256:3dfacc6becf2d6558efa4b625bae3b844ced5d256f3143ebf774e005367e712a", size = 22102, upload-time = "2025-11-01T19:22:53.894Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/bb/bbae36d06c0fd670e8373da67096cd57058b57c9bad7d92969b5e3b730af/scooby-0.11.0-py3-none-any.whl", hash = "sha256:a79663d1a7711eb104e4b2935988ea1ed5f7be6b7288fad23b4fba7462832f9d", size = 19877, upload-time = "2025-11-01T19:22:53.046Z" },
+]
+
+[[package]]
 name = "setuptools"
 version = "75.3.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1125,6 +1176,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/b1/95/49d44fe2fc0c476064f29c555ed6470dfb5066c0ccfea57506d90e6fbb42/vispy-0.14.2-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:95f1e6463ffc8aca6fdb4101cb65196b2725ca9f677a267acf2c675c660d12dd", size = 1839501, upload-time = "2024-03-14T16:13:44.592Z" },
     { url = "https://files.pythonhosted.org/packages/81/52/a5279c60b6cfd97e2a8ff250e7d56efc0aa5cd31b08dd2d5f4e6a1a46afc/vispy-0.14.2-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9951832b2bc1f964d9fc916c207f7771357ca34747863cfbd4a7a34cbed76550", size = 1845414, upload-time = "2024-03-14T16:13:48.561Z" },
     { url = "https://files.pythonhosted.org/packages/1f/2b/208448d84838b4ded8240dc979f94bbc6a73f64ebd94e667b2a7e05f01fe/vispy-0.14.2-cp38-cp38-win_amd64.whl", hash = "sha256:6d944ccd0d7fb1b8fa694781cb036cb1011853e6d3e1038f5b4da4d0094ed9a1", size = 1467600, upload-time = "2024-03-14T16:13:51.092Z" },
+]
+
+[[package]]
+name = "vtk"
+version = "9.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/15/40f8264f1b5379f12caf0e5153006a61c1f808937877c996e907610e8f23/vtk-9.3.1-cp38-cp38-macosx_10_10_x86_64.whl", hash = "sha256:6adf4b812528a4658667602de8f023400c4381b8166f11b0ea8e0ab83c066539", size = 76699386, upload-time = "2024-06-29T03:17:03.169Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/36/eafd9073a6f31d808f321d508eb034e579bd21457d6eadd805f4aa0317a6/vtk-9.3.1-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:eaf90d0a797b5b7ada3fd0100c072dd146e674a2ccd25411036a4aca676f9101", size = 92112382, upload-time = "2024-06-29T03:17:17.251Z" },
+    { url = "https://files.pythonhosted.org/packages/18/71/f13b98497f2a60d6fd2ee87f7ac7df048741d1e456a0fa08f08bb3537f97/vtk-9.3.1-cp38-cp38-win_amd64.whl", hash = "sha256:872e964c38dc1d969aaa29d10a5e56fd0324d61392e21dc044c679797fbdf0ef", size = 52791994, upload-time = "2024-06-29T03:17:24.358Z" },
 ]
 
 [[package]]

@@ -8,7 +8,7 @@ import pandas as pd
 
 from Mask import Mask
 import knn as knn
-from core.viewer import CameraController, get_open3d_viewer_adapter, get_pptk_viewer_adapter, get_vispy_viewer_adapter
+from core.viewer import CameraController, get_open3d_viewer_adapter, get_pptk_viewer_adapter, get_vispy_viewer_adapter, get_pyvista_viewer_adapter
 from core.io import PointCloudIO, PlyIO
 from core.history import UndoRedoManager
 from core.processing import PointCloudTransforms, SpatialQueries, PointCloudFilters
@@ -27,7 +27,11 @@ class PointCloud:
         self.render_flag = render
         self.viewer_type = viewer_type.lower() if viewer_type else 'pptk'
 
-        if self.viewer_type == 'vispy':
+        if self.viewer_type == 'pyvista':
+            self.camera_controller = None
+            PyvistaViewerAdapter = get_pyvista_viewer_adapter()
+            self.viewer_adapter = PyvistaViewerAdapter()
+        elif self.viewer_type == 'vispy':
             self.camera_controller = None
             VispyViewerAdapter = get_vispy_viewer_adapter()
             self.viewer_adapter = VispyViewerAdapter()

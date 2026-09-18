@@ -34,7 +34,8 @@ Puedes instalar las dependencias según el visor 3D que prefieras utilizar:
 
 | Opción | Comando | Descripción |
 | :--- | :--- | :--- |
-| **Completa (Recomendada)** | `uv tool install --force ".[all]"` | Instala **PPTK**, **VisPy** y **Open3D** juntos. Permite alternar entre todos libremente. |
+| **Completa (Recomendada)** | `uv tool install --force ".[all]"` | Instala **PPTK**, **VisPy**, **PyVista (VTK)** y **Open3D** juntos. Permite alternar entre todos libremente. |
+| **PyVista (VTK Terrain)** | `uv tool install --force ".[pyvista]"` | Instala **PyVista / VTK** con cámara Terrain $+Z$ y selección por frustum estable. |
 | **VisPy (Turntable + OpenGL)** | `uv tool install --force ".[vispy]"` | Instala **VisPy** con cámara orbital $+Z$ y selección por caja idéntica a PPTK (100% multiplataforma). |
 | **Solo PPTK** | `uv tool install --force ".[pptk]"` | Instala el visor nativo PPTK (ideal para Linux x86_64). |
 | **Solo Open3D** | `uv tool install --force ".[open3d]"` | Instala el visor Open3D. |
@@ -95,7 +96,9 @@ cdann [folderName]
 Argumentos principales:
 + `folder`            -- Carpeta o archivo PLY a cargar (opcional, se puede abrir desde la GUI con "Open PLY")
 + `--point_size`      -- Tamaño de los puntos [Por defecto: 0.01]
-+ `--use-open3d`      -- Usar visor moderno Open3D en lugar de PPTK
++ `--use-pyvista`     -- Usar visor PyVista (VTK Terrain)
++ `--use-vispy`       -- Usar visor VisPy (OpenGL Turntable)
++ `--use-open3d`      -- Usar visor Open3D en lugar de PPTK
 + `--r`               -- Modo recovery [Abre el último avance en vez del archivo original]
 + `--name`            -- Especifica el archivo en el modo recovery a usar
 
@@ -103,6 +106,18 @@ Argumentos principales:
 
 ```bash
 cdann ./dataset/Quanergy000/Quanergy000.ply --point_size 0.03
+```
+
+**Ejemplo con visor PyVista (VTK):**
+
+```bash
+cdann ./dataset/Quanergy000/Quanergy000.ply --use-pyvista
+```
+
+**Ejemplo con visor VisPy:**
+
+```bash
+cdann ./dataset/Quanergy000/Quanergy000.ply --use-vispy
 ```
 
 **Ejemplo con visor Open3D:**

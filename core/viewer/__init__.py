@@ -12,6 +12,10 @@ def get_vispy_viewer_adapter():
     from core.viewer.vispy_viewer import VispyViewerAdapter
     return VispyViewerAdapter
 
+def get_pyvista_viewer_adapter():
+    from core.viewer.pyvista_viewer import PyvistaViewerAdapter
+    return PyvistaViewerAdapter
+
 def get_pptk_viewer_adapter():
     from core.viewer.pptk_viewer import PptkViewerAdapter
     return PptkViewerAdapter
@@ -27,6 +31,7 @@ __all__ = [
     'PptkViewerAdapter',
     'get_open3d_viewer_adapter',
     'get_vispy_viewer_adapter',
+    'get_pyvista_viewer_adapter',
     'get_pptk_viewer_adapter',
 ]
 

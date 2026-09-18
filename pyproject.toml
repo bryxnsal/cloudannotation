@@ -31,11 +31,17 @@ vispy = [
     "glfw>=2.5.0",
     "PyQt5>=5.15.0",
 ]
+pyvista = [
+    "pyvista>=0.43.0",
+    "vtk>=9.2.0",
+]
 all = [
     "open3d==0.19.0",
     "vispy>=0.14.0",
     "glfw>=2.5.0",
     "PyQt5>=5.15.0",
+    "pyvista>=0.43.0",
+    "vtk>=9.2.0",
     "pptk @ https://github.com/ChadLin9596/pptk/releases/download/v0.1.1/pptk-0.1.1-cp38-none-manylinux_2_35_x86_64.whl#sha256=08613f6e12f45d5d2997f949354a96ab5f6deca72352ef771f2634d565817b26 ; sys_platform == 'linux'",
 ]
 
