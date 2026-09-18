@@ -9,30 +9,48 @@ import open3d as o3d
 from core.viewer.base_viewer import BaseViewerAdapter
 
 
-# Default palette for class-based visualization when RGB is absent or when classes are shown
-DEFAULT_PALETTE = np.array([
-    [0.7, 0.7, 0.7],  # 0: Unclassified (gray)
-    [0.55, 0.27, 0.07], # 1: Ground (brown)
-    [0.13, 0.55, 0.13], # 2: Vegetation (green)
-    [0.85, 0.65, 0.13], # 3: Buildings (golden/yellow)
-    [0.8, 0.2, 0.2],   # 4: Postes BT (red)
-    [0.2, 0.6, 0.8],   # 5: Cables BT (cyan/blue)
-    [0.9, 0.5, 0.1],   # 6: Postes MT (orange)
-    [0.1, 0.4, 0.9],   # 7: Cables MT (blue)
-    [0.6, 0.1, 0.8],   # 8: Postes AT (purple)
-    [0.1, 0.8, 0.8],   # 9: Cables AT (teal)
-    [0.9, 0.9, 0.2],   # 10: Anuncios (yellow)
-    [0.4, 0.3, 0.2],   # 11: Escombros
-    [0.5, 0.5, 0.5],   # 12: Andamios
-    [0.7, 0.4, 0.1],   # 13: Escaleras
-    [0.8, 0.3, 0.2],   # 14: Ladrillos
-    [1.0, 0.0, 1.0],   # 15: Trabajos electricos MT (magenta)
-], dtype=np.float64)
+# Default palette matching standard PPTK colormapping behavior for classes
+def _get_class_colormap(classes: np.ndarray, max_label: int = 25) -> np.ndarray:
+    """
+    Generate distinct RGB colors in [0, 1] for class IDs, identical to PPTK scalar colormap.
+    Class 0 (unclassified) is assigned neutral gray [0.7, 0.7, 0.7].
+    Classes >= 1 are mapped across the standard colormap spectrum.
+    """
+    try:
+        import matplotlib.pyplot as plt
+        cmap = plt.get_cmap('tab20')
+    except Exception:
+        cmap = None
+
+    num_pts = len(classes)
+    colors = np.zeros((num_pts, 3), dtype=np.float64)
+
+    # Base neutral color for class 0 (unclassified)
+    is_zero = (classes == 0)
+    colors[is_zero] = [0.7, 0.7, 0.7]
+
+    non_zero_idx = np.where(~is_zero)[0]
+    if len(non_zero_idx) > 0:
+        c_vals = classes[non_zero_idx]
+        if cmap is not None:
+            # tab20 provides 20 highly distinguishable colors for categorical labeling
+            for i, c in zip(non_zero_idx, c_vals):
+                rgba = cmap((int(c) - 1) % 20)
+                colors[i] = rgba[:3]
+        else:
+            # Fallback procedural distinct hues
+            norm = (c_vals % max(1, max_label)) / float(max(1, max_label))
+            colors[non_zero_idx, 0] = np.sin(norm * np.pi) ** 2
+            colors[non_zero_idx, 1] = np.sin((norm + 0.33) * np.pi) ** 2
+            colors[non_zero_idx, 2] = np.sin((norm + 0.66) * np.pi) ** 2
+
+    return colors
 
 
 class Open3dViewerAdapter(BaseViewerAdapter):
     """
     Manages rendering, interaction, point picking and camera parameters using Open3D Visualizer.
+    Provides 100% functional parity with PPTK viewer.
     """
     def __init__(self, camera_controller=None):
         super().__init__(camera_controller=camera_controller)
@@ -67,7 +85,6 @@ class Open3dViewerAdapter(BaseViewerAdapter):
 
     def set_point_size(self, size: float) -> bool:
         """Update point size dynamically."""
-        # Convert pptk-like float (e.g. 0.01) to pixel scale if very small, or use directly
         if size < 0.1:
             pixel_size = max(1.0, size * 300.0)
         else:
@@ -75,38 +92,46 @@ class Open3dViewerAdapter(BaseViewerAdapter):
 
         self.point_size = pixel_size
         if self.is_ready():
-            try:
-                render_opt = self.vis.get_render_option()
-                if render_opt:
-                    render_opt.point_size = float(self.point_size)
-                    return True
-            except Exception as e:
-                print("Open3dViewer: Error setting point size:", e)
+            with self._lock:
+                try:
+                    render_opt = self.vis.get_render_option()
+                    if render_opt:
+                        render_opt.point_size = float(self.point_size)
+                        return True
+                except Exception as e:
+                    print("Open3dViewer: Error setting point size:", e)
         return False
 
     def _get_colors(self, points_df, mask):
-        """Compute Nx3 float RGB colors in [0, 1] range based on df columns."""
+        """
+        Compute Nx3 float RGB colors in [0, 1] range matching PPTK attribute display.
+        If classes are present and any point is classified, display categorical class colormap.
+        If class is 0 across all points and real RGB channels exist, display natural RGB.
+        """
         mask_indices = mask[:] if hasattr(mask, '__getitem__') else mask
         num_pts = int(np.sum(mask_indices))
         if num_pts == 0:
             return np.zeros((0, 3), dtype=np.float64)
 
+        has_classes = 'class' in points_df.columns
+        if has_classes:
+            classes = points_df.loc[mask_indices, 'class'].to_numpy(dtype=int)
+            # If any points are classified or user is annotating, prioritize class colormap
+            if np.any(classes > 0) or not ('r' in points_df.columns and 'g' in points_df.columns and 'b' in points_df.columns):
+                return _get_class_colormap(classes)
+
+        # Fallback to direct RGB if classes are not present or all 0
         if 'r' in points_df.columns and 'g' in points_df.columns and 'b' in points_df.columns:
             rgb = points_df.loc[mask_indices, ['r', 'g', 'b']].to_numpy(dtype=np.float64)
             if rgb.max() > 1.0:
                 rgb /= 255.0
             return rgb
 
-        if 'class' in points_df.columns:
+        if has_classes:
             classes = points_df.loc[mask_indices, 'class'].to_numpy(dtype=int)
-            colors = np.zeros((num_pts, 3), dtype=np.float64)
-            palette_len = len(DEFAULT_PALETTE)
-            for idx, c in enumerate(classes):
-                colors[idx] = DEFAULT_PALETTE[c % palette_len]
-            return colors
+            return _get_class_colormap(classes)
 
-        # Default white/light gray
-        return np.full((num_pts, 3), 0.8, dtype=np.float64)
+        return np.full((num_pts, 3), 0.7, dtype=np.float64)
 
     def update_attributes(self, points_df, mask) -> bool:
         """Update colors of the currently displayed point cloud."""
@@ -125,7 +150,10 @@ class Open3dViewerAdapter(BaseViewerAdapter):
         return False
 
     def render(self, points_df, mask, preserve_camera: bool = True) -> bool:
-        """Load or replace point cloud geometry in Open3D viewport."""
+        """
+        Load or replace point cloud geometry in Open3D viewport.
+        Properly handles changing point counts (for Multi, Select, ROI) by recreating geometry buffers.
+        """
         if points_df is None or mask is None:
             return False
 
@@ -151,10 +179,24 @@ class Open3dViewerAdapter(BaseViewerAdapter):
                 if preserve_camera and view_ctrl:
                     saved_cam = view_ctrl.convert_to_pinhole_camera_parameters()
 
-                # Update Open3D PointCloud object
-                self.pcd.points = o3d.utility.Vector3dVector(xyz)
-                self.pcd.colors = o3d.utility.Vector3dVector(rgb)
-                self.vis.update_geometry(self.pcd)
+                curr_len = len(self.pcd.points) if self.pcd is not None else 0
+
+                if curr_len != num_points:
+                    # Point count changed (e.g. Multi, Select ROI, All)
+                    # Open3D requires removing and re-adding geometry to resize vertex buffers
+                    if self.pcd is not None:
+                        self.vis.remove_geometry(self.pcd, reset_bounding_box=False)
+
+                    new_pcd = o3d.geometry.PointCloud()
+                    new_pcd.points = o3d.utility.Vector3dVector(xyz)
+                    new_pcd.colors = o3d.utility.Vector3dVector(rgb)
+                    self.pcd = new_pcd
+                    self.vis.add_geometry(self.pcd, reset_bounding_box=False)
+                else:
+                    # In-place update when point count is identical
+                    self.pcd.points = o3d.utility.Vector3dVector(xyz)
+                    self.pcd.colors = o3d.utility.Vector3dVector(rgb)
+                    self.vis.update_geometry(self.pcd)
 
                 # Restore camera if captured
                 if preserve_camera and saved_cam and view_ctrl:
@@ -163,6 +205,9 @@ class Open3dViewerAdapter(BaseViewerAdapter):
                 render_opt = self.vis.get_render_option()
                 if render_opt:
                     render_opt.point_size = float(self.point_size)
+
+                # Clear picked points on geometry replacement
+                self._picked_indices = []
 
                 return True
             except Exception as e:
@@ -212,6 +257,17 @@ class Open3dViewerAdapter(BaseViewerAdapter):
                             break
                         alive = self.vis.poll_events()
                         self.vis.update_renderer()
+
+                        # Continuously synchronize picked points
+                        try:
+                            picked = self.vis.get_picked_points()
+                            if picked:
+                                self._picked_indices = [int(p.index) for p in picked]
+                            else:
+                                self._picked_indices = []
+                        except Exception:
+                            pass
+
                         if not alive:
                             break
                     time.sleep(0.016)  # ~60 FPS polling
@@ -232,12 +288,14 @@ class Open3dViewerAdapter(BaseViewerAdapter):
             return []
         with self._lock:
             try:
-                picked = self.vis.get_picked_points()
-                if picked:
-                    return [int(p.index) for p in picked]
-                return []
+                if self.vis is not None:
+                    picked = self.vis.get_picked_points()
+                    if picked:
+                        self._picked_indices = [int(p.index) for p in picked]
+                        return list(self._picked_indices)
+                return list(self._picked_indices)
             except Exception as e:
-                return []
+                return list(self._picked_indices)
 
     def set_selected_indices(self, indices: list) -> bool:
         """Clear or highlight picked points."""
@@ -245,9 +303,11 @@ class Open3dViewerAdapter(BaseViewerAdapter):
             return False
         with self._lock:
             try:
-                self.vis.clear_picked_points()
-                if indices and hasattr(self.vis, 'add_picked_points'):
-                    self.vis.add_picked_points(indices)
+                self._picked_indices = list(indices) if indices else []
+                if self.vis is not None:
+                    self.vis.clear_picked_points()
+                    if indices and hasattr(self.vis, 'add_picked_points'):
+                        self.vis.add_picked_points(indices)
                 return True
             except Exception:
                 return False

@@ -35,8 +35,9 @@ class SelectionManager:
                 if invert and showing is not None:
                     mask.bools = showing.bools.copy()
                 return mask
+            num_rendered = int(np.sum(showing.bools)) if showing is not None else total_points
             if invert:
-                unselection = np.arange(0, total_points)
+                unselection = np.arange(0, num_rendered)
                 unselection = unselection[np.in1d(unselection, selection, invert=True)]
                 mask.setr_subset(unselection, showing)
                 return mask
