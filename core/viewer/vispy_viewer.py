@@ -256,7 +256,7 @@ class VispyViewerAdapter(BaseViewerAdapter):
                 edge_color=None,
                 face_color=self._get_display_colors(),
                 size=float(self.point_size),
-                symbol='square'
+                symbol='disc'
             )
             self.scatter.set_gl_state(depth_test=True, blend=True, blend_func=('src_alpha', 'one_minus_src_alpha'))
 
@@ -300,14 +300,14 @@ class VispyViewerAdapter(BaseViewerAdapter):
                 self._current_colors = initial_rgb
                 self._picked_indices = []
 
-                # Use square points without antialiasing for maximum GPU throughput (identical to PPTK)
+                # Circular disc points matching PPTK
                 scatter = visuals.Markers(antialias=0)
                 scatter.set_data(
                     initial_xyz,
                     edge_color=None,
                     face_color=self._get_display_colors(),
                     size=float(self.point_size),
-                    symbol='square'
+                    symbol='disc'
                 )
                 scatter.set_gl_state(depth_test=True, blend=True, blend_func=('src_alpha', 'one_minus_src_alpha'))
                 view.add(scatter)
