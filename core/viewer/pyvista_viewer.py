@@ -344,6 +344,8 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
 
                 # Connect mouse events via VTK Interactor observers for Ctrl + Drag selection
                 iren = plotter.iren.interactor
+                terrain_style = plotter.iren.interactor.GetInteractorStyle()
+                none_style = vtk.vtkInteractorStyle()
 
                 def _update_rect_display(p0, p1):
                     x0, y0 = p0
@@ -356,49 +358,64 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
                     self._rect_pts.Modified()
 
                 def on_left_down(obj, event):
+                    # If Ctrl is pressed, enter box selection mode
                     if obj.GetControlKey():
                         self._is_selecting = True
                         pos = obj.GetEventPosition()
                         self._select_start = pos
                         _update_rect_display(pos, pos)
                         self._rect_actor.SetVisibility(True)
+                        # Switch to none_style so VTK camera does not rotate while selecting
+                        iren.SetInteractorStyle(none_style)
                         plotter.render()
-                        # Abort event so camera does not rotate
-                        obj.SetAbortFlag(1)
+                    elif not obj.GetShiftKey():
+                        # Simple Left Click without Ctrl and without Shift clears selection (just like PPTK)
+                        self._select_start = obj.GetEventPosition()
 
                 def on_mouse_move(obj, event):
                     if self._is_selecting and self._select_start is not None:
                         pos = obj.GetEventPosition()
                         _update_rect_display(self._select_start, pos)
                         plotter.render()
-                        obj.SetAbortFlag(1)
 
                 def on_left_up(obj, event):
-                    if self._is_selecting and self._select_start is not None:
+                    p1 = obj.GetEventPosition()
+                    p0 = self._select_start
+                    self._select_start = None
+
+                    if self._is_selecting:
                         self._is_selecting = False
                         self._rect_actor.SetVisibility(False)
+                        # Restore normal terrain camera interaction style
+                        iren.SetInteractorStyle(terrain_style)
 
-                        p0 = self._select_start
-                        p1 = obj.GetEventPosition()
-                        self._select_start = None
+                        if p0 is not None:
+                            x_min, x_max = min(p0[0], p1[0]), max(p0[0], p1[0])
+                            y_min, y_max = min(p0[1], p1[1]), max(p0[1], p1[1])
 
-                        x_min, x_max = min(p0[0], p1[0]), max(p0[0], p1[0])
-                        y_min, y_max = min(p0[1], p1[1]), max(p0[1], p1[1])
-
-                        if abs(x_max - x_min) < 3 and abs(y_max - y_min) < 3:
-                            self._picked_indices = []
-                        else:
-                            self._perform_box_selection(x_min, x_max, y_min, y_max, plotter.renderer)
+                            # If dragging a rectangle, accumulate selection (union) like PPTK
+                            if abs(x_max - x_min) >= 3 or abs(y_max - y_min) >= 3:
+                                new_indices = self._perform_box_selection(x_min, x_max, y_min, y_max, plotter.renderer)
+                                if new_indices:
+                                    # Cumulative selection: merge uniquely
+                                    curr_set = set(self._picked_indices)
+                                    curr_set.update(new_indices)
+                                    self._picked_indices = list(curr_set)
 
                         self._apply_colors_to_polydata()
-                        obj.SetAbortFlag(1)
+                    elif p0 is not None and not obj.GetControlKey() and not obj.GetShiftKey():
+                        # Single click without drag: clear selection
+                        x_diff = abs(p1[0] - p0[0])
+                        y_diff = abs(p1[1] - p0[1])
+                        if x_diff < 3 and y_diff < 3 and self._picked_indices:
+                            self._picked_indices = []
+                            self._apply_colors_to_polydata()
 
                 def on_key_press(obj, event):
                     key = obj.GetKeySym()
                     if key in ['c', 'C']:
                         self._picked_indices = []
                         self._apply_colors_to_polydata()
-                        obj.SetAbortFlag(1)
 
                 iren.AddObserver('LeftButtonPressEvent', on_left_down, 10.0)
                 iren.AddObserver('MouseMoveEvent', on_mouse_move, 10.0)
@@ -446,7 +463,7 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
     def _perform_box_selection(self, x_min, x_max, y_min, y_max, renderer):
         """Vectorized screen-space bounding box filter on 3D point cloud using VTK camera projection."""
         if self._current_xyz is None or len(self._current_xyz) == 0:
-            return
+            return []
 
         try:
             cam = renderer.GetActiveCamera()
@@ -469,9 +486,10 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
             screen_y = (ndc[:, 1] + 1.0) * 0.5 * win_h
 
             in_box = valid_depth & (screen_x >= x_min) & (screen_x <= x_max) & (screen_y >= y_min) & (screen_y <= y_max)
-            self._picked_indices = np.where(in_box)[0].tolist()
+            return np.where(in_box)[0].tolist()
         except Exception as e:
             print("PyvistaViewer: Box selection error:", e)
+            return []
 
     def get_selected_indices(self) -> list:
         with self._lock:
