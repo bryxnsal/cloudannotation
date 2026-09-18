@@ -314,7 +314,7 @@ class VispyViewerAdapter(BaseViewerAdapter):
         def _run_loop():
             try:
                 canvas = scene.SceneCanvas(
-                    title="CloudAnnotation - VisPy Viewer (PPTK Compatible)",
+                    title="CloudAnnotation",
                     size=(1280, 800),
                     bgcolor=(0.1, 0.1, 0.1, 1.0),
                     keys='interactive',
