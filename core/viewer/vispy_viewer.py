@@ -32,7 +32,7 @@ from core.viewer.base_viewer import BaseViewerAdapter
 if vispy is not None:
     class SmoothTurntableCamera(scene.TurntableCamera):
         """TurntableCamera with calibrated, smooth pan sensitivity for Shift + Click (identical to PPTK)."""
-        pan_sensitivity = 0.25
+        pan_sensitivity = 0.5
 
         def viewbox_mouse_event(self, event):
             if event.handled or not self.interactive:
