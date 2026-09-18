@@ -1,6 +1,6 @@
 [project]
 name = "cloudannotation"
-version = "0.3.0"
+version = "0.3.1"
 description = "Herramienta de anotación y visualización 3D de nubes de puntos"
 readme = "README.md"
 requires-python = ">=3.8,<3.9"

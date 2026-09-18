@@ -169,7 +169,7 @@ def main():
             import importlib.metadata as meta
             cdann_ver = meta.version('cloudannotation')
         except Exception:
-            cdann_ver = '0.3.0'
+            cdann_ver = '0.3.1'
         print(f"cdann version:    {cdann_ver}")
 
         # Default viewer determination
