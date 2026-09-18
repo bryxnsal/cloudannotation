@@ -362,9 +362,3 @@ Si en una máquina nueva PPTK no encuentra `libtbb`, instálala desde los reposi
 ```bash
 sudo apt update && sudo apt install -y libtbb-dev
 ```
-
-### 2. Alternativa rápida sin depender de drivers o librerías de PPTK
-Si no deseas instalar librerías adicionales del sistema, puedes ejecutar directamente con el visor Open3D:
-```bash
-cdann --use-open3d
-```
