@@ -99,8 +99,15 @@ Argumentos principales:
 + `--use-pyvista`     -- Usar visor PyVista (VTK Terrain)
 + `--use-vispy`       -- Usar visor VisPy (OpenGL Turntable)
 + `--use-open3d`      -- Usar visor Open3D en lugar de PPTK
++ `--sysinfo`         -- Muestra información detallada del entorno, visores y drivers de GPU
 + `--r`               -- Modo recovery [Abre el último avance en vez del archivo original]
 + `--name`            -- Especifica el archivo en el modo recovery a usar
+
+**Ver información del sistema y entorno:**
+
+```bash
+cdann --sysinfo
+```
 
 **Ejemplo en modo normal (PPTK):**
 

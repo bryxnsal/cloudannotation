@@ -83,9 +83,80 @@ def main():
     parser.add_argument("--use-open3d", dest="use_open3d", action="store_true", help="Use Open3D as 3D visualizer instead of PPTK")
     parser.add_argument("--use-vispy", dest="use_vispy", action="store_true", help="Use VisPy (OpenGL Turntable) as 3D visualizer instead of PPTK")
     parser.add_argument("--use-pyvista", dest="use_pyvista", action="store_true", help="Use PyVista (VTK Terrain) as 3D visualizer instead of PPTK")
-    parser.set_defaults(render=True, r=False, labels=14, use_open3d=False, use_vispy=False, use_pyvista=False)
+    parser.add_argument("--sysinfo", "-sysinfo", dest="sysinfo", action="store_true", help="Display system information, environment, 3D viewers and GPU drivers")
+    parser.set_defaults(render=True, r=False, labels=14, use_open3d=False, use_vispy=False, use_pyvista=False, sysinfo=False)
 
     opt = parser.parse_args()
+
+    if opt.sysinfo:
+        import platform
+        import shutil
+        import subprocess
+
+        print("=" * 62)
+        print("            CloudAnnotation (cdann) - System Info")
+        print("=" * 62)
+        print(f"OS:               {platform.system()} {platform.release()} ({platform.machine()})")
+        print(f"Python:           {platform.python_version()} ({sys.executable})")
+
+        try:
+            import importlib.metadata as meta
+            cdann_ver = meta.version('cloudannotation')
+        except Exception:
+            cdann_ver = '0.3.0'
+        print(f"cdann version:    {cdann_ver}")
+        print("-" * 62)
+        print("3D Viewers & Core Dependencies:")
+
+        libs = [
+            ('pptk', 'pptk'),
+            ('pyvista', 'pyvista'),
+            ('vtk', 'vtk'),
+            ('vispy', 'vispy'),
+            ('glfw', 'glfw'),
+            ('PyQt5', 'PyQt5'),
+            ('open3d', 'open3d'),
+            ('numpy', 'numpy'),
+            ('pandas', 'pandas'),
+            ('laspy', 'laspy'),
+            ('plyfile', 'plyfile'),
+        ]
+        for name, mod_name in libs:
+            try:
+                m = __import__(mod_name)
+                ver = getattr(m, '__version__', None)
+                if ver is None and mod_name == 'vtk':
+                    ver = getattr(m, 'vtkVersion', None)
+                    if ver:
+                        ver = ver.GetVTKVersion()
+                ver_str = str(ver) if ver else 'Installed'
+                print(f"  {name:<14} {ver_str:<18} [AVAILABLE]")
+            except Exception:
+                print(f"  {name:<14} {'Not installed':<18} [NOT AVAILABLE]")
+
+        print("-" * 62)
+        print("Graphics & OpenGL Hardware:")
+        gl_found = False
+        if shutil.which('glxinfo'):
+            try:
+                res = subprocess.run(['glxinfo'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=3)
+                for line in res.stdout.splitlines():
+                    if any(k in line for k in ['OpenGL vendor', 'OpenGL renderer', 'OpenGL version', 'OpenGL shading language']):
+                        print("  " + line.strip())
+                        gl_found = True
+            except Exception:
+                pass
+        if not gl_found and shutil.which('nvidia-smi'):
+            try:
+                res = subprocess.run(['nvidia-smi', '--query-gpu=name,driver_version', '--format=csv,noheader'], stdout=subprocess.PIPE, text=True, timeout=3)
+                print("  NVIDIA GPU:     " + res.stdout.strip())
+                gl_found = True
+            except Exception:
+                pass
+        if not gl_found:
+            print("  Could not query GPU details automatically (glxinfo not found).")
+        print("=" * 62)
+        return
 
     resource_filename = ""
     opt_file = None
