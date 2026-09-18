@@ -19,8 +19,15 @@ def _get_class_colormap(classes: np.ndarray, max_label: int = 25) -> np.ndarray:
     try:
         import matplotlib.pyplot as plt
         cmap = plt.get_cmap('tab20')
+        palette = np.array([cmap(i)[:3] for i in range(20)], dtype=np.float64)
     except Exception:
-        cmap = None
+        palette = np.array([
+            [0.12, 0.46, 0.70], [0.68, 0.78, 0.90], [1.00, 0.49, 0.05], [1.00, 0.73, 0.47],
+            [0.17, 0.62, 0.17], [0.59, 0.87, 0.54], [0.83, 0.15, 0.15], [1.00, 0.59, 0.58],
+            [0.58, 0.40, 0.74], [0.77, 0.69, 0.83], [0.54, 0.33, 0.29], [0.77, 0.61, 0.58],
+            [0.89, 0.46, 0.76], [0.96, 0.71, 0.82], [0.49, 0.49, 0.49], [0.78, 0.78, 0.78],
+            [0.73, 0.74, 0.13], [0.85, 0.86, 0.54], [0.09, 0.74, 0.81], [0.61, 0.85, 0.89],
+        ], dtype=np.float64)
 
     num_pts = len(classes)
     colors = np.zeros((num_pts, 3), dtype=np.float64)
@@ -29,20 +36,10 @@ def _get_class_colormap(classes: np.ndarray, max_label: int = 25) -> np.ndarray:
     is_zero = (classes == 0)
     colors[is_zero] = [0.7, 0.7, 0.7]
 
-    non_zero_idx = np.where(~is_zero)[0]
-    if len(non_zero_idx) > 0:
-        c_vals = classes[non_zero_idx]
-        if cmap is not None:
-            # tab20 provides 20 highly distinguishable colors for categorical labeling
-            for i, c in zip(non_zero_idx, c_vals):
-                rgba = cmap((int(c) - 1) % 20)
-                colors[i] = rgba[:3]
-        else:
-            # Fallback procedural distinct hues
-            norm = (c_vals % max(1, max_label)) / float(max(1, max_label))
-            colors[non_zero_idx, 0] = np.sin(norm * np.pi) ** 2
-            colors[non_zero_idx, 1] = np.sin((norm + 0.33) * np.pi) ** 2
-            colors[non_zero_idx, 2] = np.sin((norm + 0.66) * np.pi) ** 2
+    non_zero = ~is_zero
+    if np.any(non_zero):
+        c_indices = (classes[non_zero].astype(int) - 1) % len(palette)
+        colors[non_zero] = palette[c_indices]
 
     return colors
 
