@@ -282,11 +282,10 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
                 plotter = pv.Plotter(title="CloudAnnotation", window_size=(1280, 800))
                 plotter.set_background((0.1, 0.1, 0.1))
 
-                # Camera style: Terrain style fixes +Z as up vector (smooth azim/elev orbital navigation)
-                plotter.enable_terrain_style(mouse_wheel_zooms=True, shift_pans=True)
-
-                # Parallel (orthographic) projection: eliminates perspective distortion and dizziness
-                plotter.enable_parallel_projection()
+                # Camera style: Trackball style provides smooth, natural rotation without horizontal distortion
+                plotter.enable_trackball_style()
+                main_style = plotter.iren.interactor.GetInteractorStyle()
+                none_style = vtk.vtkInteractorStyle()
 
                 self._current_xyz = initial_xyz
                 self._current_colors = initial_rgb
@@ -347,8 +346,6 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
 
                 # Connect mouse events via VTK Interactor observers for Ctrl + Drag selection
                 iren = plotter.iren.interactor
-                terrain_style = plotter.iren.interactor.GetInteractorStyle()
-                none_style = vtk.vtkInteractorStyle()
 
                 def _update_rect_display(p0, p1):
                     x0, y0 = p0
@@ -361,18 +358,24 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
                     self._rect_pts.Modified()
 
                 def on_left_down(obj, event):
-                    # If Ctrl is pressed, enter box selection mode
+                    # If Ctrl is pressed, enter box selection/deselection mode
                     if obj.GetControlKey():
                         self._is_selecting = True
+                        self._is_deselecting = bool(obj.GetShiftKey())
                         pos = obj.GetEventPosition()
                         self._select_start = pos
                         _update_rect_display(pos, pos)
+                        # Red border if deselecting (Ctrl+Shift), Yellow if selecting (Ctrl)
+                        if self._is_deselecting:
+                            self._rect_actor.GetProperty().SetColor(1.0, 0.2, 0.2)
+                        else:
+                            self._rect_actor.GetProperty().SetColor(1.0, 1.0, 0.0)
                         self._rect_actor.SetVisibility(True)
                         # Switch to none_style so VTK camera does not rotate while selecting
                         iren.SetInteractorStyle(none_style)
                         plotter.render()
                     elif not obj.GetShiftKey():
-                        # Simple Left Click without Ctrl and without Shift clears selection (just like PPTK)
+                        # Simple Left Click without Ctrl and without Shift clears selection
                         self._select_start = obj.GetEventPosition()
 
                 def on_mouse_move(obj, event):
@@ -388,21 +391,26 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
 
                     if self._is_selecting:
                         self._is_selecting = False
+                        is_desel = getattr(self, '_is_deselecting', False)
+                        self._is_deselecting = False
                         self._rect_actor.SetVisibility(False)
-                        # Restore normal terrain camera interaction style
-                        iren.SetInteractorStyle(terrain_style)
+                        # Restore normal trackball camera interaction style
+                        iren.SetInteractorStyle(main_style)
 
                         if p0 is not None:
                             x_min, x_max = min(p0[0], p1[0]), max(p0[0], p1[0])
                             y_min, y_max = min(p0[1], p1[1]), max(p0[1], p1[1])
 
-                            # If dragging a rectangle, accumulate selection (union) like PPTK
                             if abs(x_max - x_min) >= 3 or abs(y_max - y_min) >= 3:
-                                new_indices = self._perform_box_selection(x_min, x_max, y_min, y_max, plotter.renderer)
-                                if new_indices:
-                                    # Cumulative selection: merge uniquely
+                                target_indices = self._perform_box_selection(x_min, x_max, y_min, y_max, plotter.renderer)
+                                if target_indices:
                                     curr_set = set(self._picked_indices)
-                                    curr_set.update(new_indices)
+                                    if is_desel:
+                                        # Ctrl + Shift: Remove from selection
+                                        curr_set.difference_update(target_indices)
+                                    else:
+                                        # Ctrl: Cumulative add to selection
+                                        curr_set.update(target_indices)
                                     self._picked_indices = list(curr_set)
 
                         self._apply_colors_to_polydata()
