@@ -273,14 +273,17 @@ class Open3dViewerAdapter(BaseViewerAdapter):
                     time.sleep(0.016)  # ~60 FPS polling
 
             except Exception as e:
+                import traceback
                 print("Open3dViewer: Visualizer loop error:", e)
+                traceback.print_exc()
             finally:
                 self._is_running = False
                 ready_event.set()
 
         self._thread = threading.Thread(target=_run_loop, daemon=True)
         self._thread.start()
-        ready_event.wait(timeout=3.0)
+        if not ready_event.wait(timeout=5.0):
+            print("Open3dViewer: Timeout waiting for visualizer window to initialize.")
 
     def get_selected_indices(self) -> list:
         """Return list of point indices picked via Open3D selection tool."""

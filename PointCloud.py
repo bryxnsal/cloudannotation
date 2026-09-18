@@ -78,6 +78,7 @@ class PointCloud:
 
     # ------------------ I/O Operations ------------------
     def load(self, filename, max_points=None):
+        self.render_flag = True
         if max_points is not None:
             self.max_points = max_points
         try:
@@ -134,6 +135,7 @@ class PointCloud:
         if not os.path.isfile(filepath):
             raise FileNotFoundError(f"File not found: {filepath}")
 
+        self.render_flag = True
         cam_persp = self.get_perspective() if (preserve_camera and self.viewer_is_ready()) else None
         self.points = self.__from_plyfile(filepath)
         self.showing = Mask(len(self.points), True)
