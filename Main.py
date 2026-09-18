@@ -98,26 +98,52 @@ def main():
         print(f"OS:               {platform.system()} {platform.release()} ({platform.machine()})")
 
         # Display server environment
-        session_type = os.environ.get('XDG_SESSION_TYPE', '')
-        disp_var = os.environ.get('DISPLAY', '')
-        wayland_var = os.environ.get('WAYLAND_DISPLAY', '')
-        disp_info = []
-        if session_type:
-            disp_info.append(session_type)
-        if disp_var:
-            disp_info.append(f"DISPLAY={disp_var}")
-        if wayland_var:
-            disp_info.append(f"WAYLAND={wayland_var}")
-        disp_str = " ".join(disp_info) if disp_info else "Headless / Unknown"
+        if sys.platform.startswith('win32'):
+            disp_str = "Windows DWM (Desktop Window Manager)"
+        else:
+            session_type = os.environ.get('XDG_SESSION_TYPE', '')
+            disp_var = os.environ.get('DISPLAY', '')
+            wayland_var = os.environ.get('WAYLAND_DISPLAY', '')
+            disp_info = []
+            if session_type:
+                disp_info.append(session_type)
+            if disp_var:
+                disp_info.append(f"DISPLAY={disp_var}")
+            if wayland_var:
+                disp_info.append(f"WAYLAND={wayland_var}")
+            disp_str = " ".join(disp_info) if disp_info else "Headless / Unknown"
         print(f"Display Server:   {disp_str}")
 
         # CPU Cores
         cpu_cores = os.cpu_count() or "Unknown"
         print(f"CPU Cores:        {cpu_cores} logical threads")
 
-        # RAM info (Linux via /proc/meminfo or generic fallback)
+        # RAM info (Windows via ctypes MEMORYSTATUSEX, Linux via /proc/meminfo)
         ram_str = "Unknown"
-        if os.path.isfile('/proc/meminfo'):
+        if sys.platform.startswith('win32'):
+            try:
+                import ctypes
+                class MEMORYSTATUSEX(ctypes.Structure):
+                    _fields_ = [
+                        ("dwLength", ctypes.c_ulong),
+                        ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                    ]
+                stat = MEMORYSTATUSEX()
+                stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+                if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                    total_gb = stat.ullTotalPhys / (1024 ** 3)
+                    avail_gb = stat.ullAvailPhys / (1024 ** 3)
+                    ram_str = f"{total_gb:.1f} GB total ({avail_gb:.1f} GB available)"
+            except Exception:
+                pass
+        elif os.path.isfile('/proc/meminfo'):
             try:
                 with open('/proc/meminfo') as f:
                     meminfo = {line.split(':')[0]: int(line.split(':')[1].strip().split()[0]) for line in f}
@@ -185,7 +211,21 @@ def main():
         print("-" * 62)
         print("Graphics & OpenGL Hardware:")
         gl_found = False
-        if shutil.which('glxinfo'):
+
+        # 1. On Windows: Query GPU via PowerShell / WMIC
+        if sys.platform.startswith('win32'):
+            try:
+                ps_cmd = 'Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Caption'
+                res = subprocess.run(['powershell', '-NoProfile', '-Command', ps_cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=4)
+                gpus = [line.strip() for line in res.stdout.splitlines() if line.strip()]
+                for gpu in gpus:
+                    print(f"  GPU Device:     {gpu}")
+                    gl_found = True
+            except Exception:
+                pass
+
+        # 2. Linux: Query glxinfo
+        if not gl_found and shutil.which('glxinfo'):
             try:
                 res = subprocess.run(['glxinfo'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=3)
                 for line in res.stdout.splitlines():
@@ -194,15 +234,36 @@ def main():
                         gl_found = True
             except Exception:
                 pass
-        if not gl_found and shutil.which('nvidia-smi'):
+
+        # 3. Cross-platform: Query nvidia-smi if available
+        if shutil.which('nvidia-smi'):
             try:
-                res = subprocess.run(['nvidia-smi', '--query-gpu=name,driver_version', '--format=csv,noheader'], stdout=subprocess.PIPE, text=True, timeout=3)
-                print("  NVIDIA GPU:     " + res.stdout.strip())
-                gl_found = True
+                res = subprocess.run(['nvidia-smi', '--query-gpu=name,driver_version', '--format=csv,noheader'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=3)
+                if res.returncode == 0:
+                    for line in res.stdout.splitlines():
+                        if line.strip():
+                            print("  NVIDIA Driver:  " + line.strip())
+                            gl_found = True
             except Exception:
                 pass
+
+        # 4. Cross-platform: Try reading OpenGL renderer string via PyQt5 or VisPy if available
         if not gl_found:
-            print("  Could not query GPU details automatically (glxinfo not found).")
+            try:
+                from PyQt5.QtWidgets import QApplication
+                from PyQt5.QtGui import QOpenGLContext, QSurfaceFormat
+                app = QApplication.instance() or QApplication([])
+                ctx = QOpenGLContext()
+                fmt = QSurfaceFormat()
+                ctx.setFormat(fmt)
+                if ctx.create():
+                    print(f"  OpenGL Profile: Qt5 OpenGL {ctx.format().majorVersion()}.{ctx.format().minorVersion()}")
+                    gl_found = True
+            except Exception:
+                pass
+
+        if not gl_found:
+            print("  Could not query GPU details automatically.")
         print("=" * 62)
         return
 
