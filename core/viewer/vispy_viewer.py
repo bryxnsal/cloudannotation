@@ -149,13 +149,10 @@ class VispyViewerAdapter(BaseViewerAdapter):
         self.point_size = pixel_size
         if self.is_ready():
             def action():
-                if self.scatter is not None and self._current_xyz is not None and self._current_colors is not None:
-                    self.scatter.set_data(
-                        self._current_xyz,
-                        edge_color=None,
-                        face_color=self._get_display_colors(),
-                        size=float(self.point_size)
-                    )
+                if self.scatter is not None and self.scatter._data is not None:
+                    self.scatter._data['a_size'] = float(self.point_size)
+                    self.scatter._vbo.set_data(self.scatter._data)
+                    self.scatter.update()
                     self.canvas.update()
                     return True
                 return False
@@ -198,6 +195,18 @@ class VispyViewerAdapter(BaseViewerAdapter):
             rgba[self._picked_indices] = [1.0, 1.0, 0.0, 1.0]  # Vivid yellow highlight
         return rgba
 
+    def _apply_colors_to_vbo(self):
+        """Ultra-fast VBO color update without re-uploading XYZ positions."""
+        if self.scatter is None or self.scatter._data is None:
+            return
+        colors = self._get_display_colors()
+        if colors is None or len(colors) != len(self.scatter._data):
+            return
+        self.scatter._data['a_bg_color'] = colors
+        self.scatter._vbo.set_data(self.scatter._data)
+        self.scatter.update()
+        self.canvas.update()
+
     def update_attributes(self, points_df, mask) -> bool:
         if not self.is_ready() or points_df is None or mask is None:
             return False
@@ -207,13 +216,7 @@ class VispyViewerAdapter(BaseViewerAdapter):
         def action():
             if self.scatter is not None and self._current_xyz is not None and len(new_colors) == len(self._current_xyz):
                 self._current_colors = new_colors
-                self.scatter.set_data(
-                    self._current_xyz,
-                    edge_color=None,
-                    face_color=self._get_display_colors(),
-                    size=float(self.point_size)
-                )
-                self.canvas.update()
+                self._apply_colors_to_vbo()
                 return True
             return False
 
@@ -252,8 +255,10 @@ class VispyViewerAdapter(BaseViewerAdapter):
                 xyz,
                 edge_color=None,
                 face_color=self._get_display_colors(),
-                size=float(self.point_size)
+                size=float(self.point_size),
+                symbol='square'
             )
+            self.scatter.set_gl_state(depth_test=True, blend=False)
 
             if preserve_camera and saved_cam is not None:
                 self._restore_camera_state(saved_cam)
@@ -295,13 +300,16 @@ class VispyViewerAdapter(BaseViewerAdapter):
                 self._current_colors = initial_rgb
                 self._picked_indices = []
 
-                scatter = visuals.Markers()
+                # Use square points without antialiasing for maximum GPU throughput (identical to PPTK)
+                scatter = visuals.Markers(antialias=0)
                 scatter.set_data(
                     initial_xyz,
                     edge_color=None,
                     face_color=self._get_display_colors(),
-                    size=float(self.point_size)
+                    size=float(self.point_size),
+                    symbol='square'
                 )
+                scatter.set_gl_state(depth_test=True, blend=False)
                 view.add(scatter)
 
                 # Selection rectangle (drawn on top in screen space)
@@ -375,13 +383,7 @@ class VispyViewerAdapter(BaseViewerAdapter):
                         else:
                             self._perform_box_selection(x_min, x_max, y_min, y_max)
 
-                        scatter.set_data(
-                            self._current_xyz,
-                            edge_color=None,
-                            face_color=self._get_display_colors(),
-                            size=float(self.point_size)
-                        )
-                        canvas.update()
+                        self._apply_colors_to_vbo()
                         event.handled = True
 
                 # Keyboard shortcut 'c' to clear selection directly in window
@@ -389,13 +391,7 @@ class VispyViewerAdapter(BaseViewerAdapter):
                 def on_key_press(event):
                     if event.key in ['c', 'C']:
                         self._picked_indices = []
-                        scatter.set_data(
-                            self._current_xyz,
-                            edge_color=None,
-                            face_color=self._get_display_colors(),
-                            size=float(self.point_size)
-                        )
-                        canvas.update()
+                        self._apply_colors_to_vbo()
 
                 with self._lock:
                     self.canvas = canvas
@@ -464,14 +460,7 @@ class VispyViewerAdapter(BaseViewerAdapter):
 
         def action():
             self._picked_indices = list(indices) if indices else []
-            if self.scatter is not None and self._current_xyz is not None:
-                self.scatter.set_data(
-                    self._current_xyz,
-                    edge_color=None,
-                    face_color=self._get_display_colors(),
-                    size=float(self.point_size)
-                )
-                self.canvas.update()
+            self._apply_colors_to_vbo()
             return True
 
         try:
