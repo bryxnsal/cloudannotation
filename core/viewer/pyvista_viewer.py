@@ -260,6 +260,9 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
                 name='cloud'
             )
 
+            # Update centroid indicator
+            self._update_centroid_indicator(xyz)
+
             if preserve_camera and saved_cam is not None:
                 self._restore_camera_state(saved_cam)
             else:
@@ -274,6 +277,25 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
             print("PyvistaViewer: Error rendering geometry:", e)
             return False
 
+    def _update_centroid_indicator(self, xyz):
+        """Draw a 3D crosshair at the geometric centroid of the point cloud."""
+        if self.plotter is None or xyz is None or len(xyz) == 0:
+            return
+        try:
+            c = np.mean(xyz, axis=0)
+            diag = float(np.linalg.norm(np.ptp(xyz, axis=0)))
+            arm_len = max(0.2, diag * 0.04)
+
+            lines = [
+                pv.Line(c - np.array([arm_len, 0, 0]), c + np.array([arm_len, 0, 0])),
+                pv.Line(c - np.array([0, arm_len, 0]), c + np.array([0, arm_len, 0])),
+                pv.Line(c - np.array([0, 0, arm_len]), c + np.array([0, 0, arm_len])),
+            ]
+            crosshair = lines[0] + lines[1] + lines[2]
+            self.plotter.add_mesh(crosshair, color='cyan', line_width=2.5, name='centroid_indicator')
+        except Exception as ex:
+            print("PyvistaViewer: Error updating centroid indicator:", ex)
+
     def _start_visualizer(self, initial_xyz, initial_rgb, initial_camera_params=None):
         ready_event = threading.Event()
 
@@ -281,6 +303,9 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
             try:
                 plotter = pv.Plotter(title="CloudAnnotation", window_size=(1280, 800))
                 plotter.set_background((0.1, 0.1, 0.1))
+
+                # Corner orientation axes marker
+                plotter.add_axes(line_width=3)
 
                 # Camera style: Trackball style provides smooth, natural rotation without horizontal distortion
                 plotter.enable_trackball_style()
@@ -305,6 +330,10 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
                     name='cloud'
                 )
                 self.actor = actor
+
+                # Add centroid indicator
+                self.plotter = plotter
+                self._update_centroid_indicator(initial_xyz)
 
                 # Create 2D rectangle overlay for selection
                 rect_source = vtk.vtkPolyData()
