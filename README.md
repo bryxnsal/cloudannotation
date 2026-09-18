@@ -2,16 +2,10 @@
 
 **CloudAnnotation** (`cdann`) es una herramienta interactiva de alto rendimiento para la visualización, inspección, segmentación y etiquetado manual/asistido de nubes de puntos 3D (`.ply`, `.las`, `.pcd`).
 
-Diseñada para flujos de trabajo de ingeniería, topografía y visión computacional (LiDAR/fotogrametría), ofrece:
-- **Soporte para 4 visores 3D de alto rendimiento**:
-  - **PyVista (VTK)**: Cámara Trackball natural con ejes de orientación en esquina, selección rectangular acumulativa (`Ctrl + Arrastre`) y deselección sustractiva (`Ctrl + Shift + Arrastre`).
-  - **VisPy (OpenGL)**: Cámara Turntable idéntica a PPTK, actualización instantánea por VBO en GPU y selección rectangular fluida (`Ctrl + Arrastre`).
-  - **PPTK**: Visor nativo con vistas numéricas (`1`, `3`, `7`), proyección ortogonal/perspectiva (`5`) y selección por caja.
-  - **Open3D**: Visor basado en `VisualizerWithVertexSelection` y atajos nativos.
-- **Etiquetado ágil y atajos directos**: Clasifica puntos seleccionados con un solo clic o atajo de teclado (`1`-`9`, `Q`-`O`, o combinaciones personalizadas de 1 a 3 teclas) tanto desde la GUI como directamente dentro de la ventana 3D.
-- **Historial completo de Undo/Redo**: Deshaz (`Ctrl+Z`) y rehaz (`Ctrl+Y`) acciones de clasificación al instante sin perder selecciones ni orientación de cámara.
-- **Control de cámara y áreas de trabajo**: Preservación permanente de perspectiva, aislamiento de regiones de interés (ROI) con `Select` e inversión de selecciones con `Select Inv`.
-- **Gestor incremental de avances**: Guarda y audita checkpoints de etiquetado en la subcarpeta `advances/` sin alterar el archivo original hasta la exportación final.
+- **Múltiples visores 3D**: Soporte para **PyVista**, **VisPy**, **PPTK** y **Open3D**.
+- **Etiquetado ágil**: Atajos de teclado directos en el visor 3D y en la GUI.
+- **Historial Undo/Redo**: Deshaz (`Ctrl+Z`) y rehaz (`Ctrl+Y`) acciones de clasificación.
+- **Gestión de avances**: Checkpoints automáticos en la carpeta `advances/`.
 
 ---
 
@@ -38,11 +32,11 @@ Puedes instalar las dependencias según el visor 3D que prefieras utilizar:
 
 | Opción | Comando | Descripción |
 | :--- | :--- | :--- |
-| **Completa (Recomendada)** | `uv tool install --force ".[all]"` | Instala **PPTK**, **VisPy**, **PyVista (VTK)** y **Open3D** juntos. Permite alternar entre todos libremente. |
-| **PyVista (VTK Terrain)** | `uv tool install --force ".[pyvista]"` | Instala **PyVista / VTK** con cámara Terrain $+Z$ y selección por frustum estable. |
-| **VisPy (Turntable + OpenGL)** | `uv tool install --force ".[vispy]"` | Instala **VisPy** con cámara orbital $+Z$ y selección por caja idéntica a PPTK (100% multiplataforma). |
-| **Solo PPTK** | `uv tool install --force ".[pptk]"` | Instala el visor nativo PPTK (ideal para Linux x86_64). |
-| **Solo Open3D** | `uv tool install --force ".[open3d]"` | Instala el visor Open3D. |
+| **Completa** | `uv tool install --force ".[all]"` | Instala todos los visores (**PyVista**, **VisPy**, **PPTK**, **Open3D**). |
+| **PyVista** | `uv tool install --force ".[pyvista]"` | Visor PyVista / VTK. |
+| **VisPy** | `uv tool install --force ".[vispy]"` | Visor VisPy OpenGL. |
+| **PPTK** | `uv tool install --force ".[pptk]"` | Visor nativo PPTK (Linux x86_64). |
+| **Open3D** | `uv tool install --force ".[open3d]"` | Visor Open3D. |
 
 > [!NOTE]
 > El wheel de PPTK está fijado por URL y SHA-256 en `pyproject.toml`, garantizando una instalación segura sin descargas de repositorios desconocidos.
@@ -169,47 +163,39 @@ dataset/
 
 Cada visor 3D implementa controles de cámara optimizados y herramientas de selección intuitivas:
 
-### 1. PyVista (VTK) — `--use-pyvista`
-*Visor de alta estabilidad con aceleración VTK por hardware, ejes XYZ interactivos en la esquina inferior izquierda y cámara Trackball:*
-- **Rotar cámara**: Clic Izquierdo + Arrastrar.
-- **Panorámica (Pan)**: Clic Derecho + Arrastrar o Clic con Rueda Central + Arrastrar.
-- **Zoom**: Rueda del ratón (Scroll) o `Shift` + Clic Derecho + Arrastrar.
-- **Selección rectangular aditiva**: `Ctrl` + Clic Izquierdo + Arrastrar (dibuja recuadro amarillo; acumula puntos a la selección actual).
-- **Deselección rectangular sustractiva**: `Ctrl` + `Shift` + Clic Izquierdo + Arrastrar (dibuja recuadro rojo; deselecciona los puntos dentro del área).
-- **Limpiar selección**: Un Clic Izquierdo simple en el fondo o presionar la tecla `C`.
+### 1. PyVista (`--use-pyvista`)
+- **Rotar**: Clic Izquierdo + Arrastrar
+- **Pan**: Clic Derecho o Rueda Central + Arrastrar
+- **Zoom**: Rueda del ratón
+- **Seleccionar**: `Ctrl` + Clic Izquierdo + Arrastrar (acumulativo)
+- **Deseleccionar**: `Ctrl` + `Shift` + Clic Izquierdo + Arrastrar
+- **Limpiar selección**: Clic Izquierdo en el fondo o tecla `C`
 
 ---
 
-### 2. VisPy (OpenGL) — `--use-vispy`
-*Visor ligero con shaders OpenGL puros y cámara Turntable de orientación fija $+Z$ (órbita idéntica a PPTK):*
-- **Rotar cámara (Turntable $+Z$)**: Clic Izquierdo + Arrastrar.
-- **Panorámica (Pan)**: Clic Derecho + Arrastrar.
-- **Zoom**: Rueda del ratón (Scroll).
-- **Selección rectangular**: `Ctrl` + Clic Izquierdo + Arrastrar (rectángulo delimitador en pantalla).
-- **Limpiar selección**: Clic simple sin arrastrar o presionar la tecla `C`.
+### 2. VisPy (`--use-vispy`)
+- **Rotar**: Clic Izquierdo + Arrastrar
+- **Pan**: Clic Derecho + Arrastrar
+- **Zoom**: Rueda del ratón
+- **Seleccionar**: `Ctrl` + Clic Izquierdo + Arrastrar
+- **Limpiar selección**: Clic Izquierdo en el fondo o tecla `C`
 
 ---
 
-### 3. PPTK — Visor por defecto en Linux
-*Visor especializado en grandes volúmenes de puntos LiDAR:*
-- **Rotar cámara**: Clic Izquierdo + Arrastrar.
-- **Panorámica (Pan)**: Clic Central (o Clic Derecho según configuración) + Arrastrar.
-- **Zoom**: Rueda del ratón (Scroll).
-- **Seleccionar puntos**: `Ctrl` + Clic Izquierdo + Arrastrar (selección por caja).
-- **Vistas ortogonales rápidas**:
-  - `Tecla 7`: Vista superior (Top view).
-  - `Tecla 1`: Vista frontal.
-  - `Tecla 3`: Vista lateral.
-  - `Tecla 5`: Alternar entre proyección perspectiva y paralela (ortográfica).
+### 3. PPTK (Por defecto en Linux)
+- **Rotar**: Clic Izquierdo + Arrastrar
+- **Pan**: Clic Central o Clic Derecho + Arrastrar
+- **Zoom**: Rueda del ratón
+- **Seleccionar**: `Ctrl` + Clic Izquierdo + Arrastrar
+- **Vistas**: `7` (Superior), `1` (Frontal), `3` (Lateral), `5` (Ortográfica/Perspectiva)
 
 ---
 
-### 4. Open3D — `--use-open3d`
-*Visor estándar de visión 3D basado en `VisualizerWithVertexSelection`:*
-- **Rotar cámara**: Clic Izquierdo + Arrastrar.
-- **Panorámica (Pan)**: `Ctrl` + Clic Izquierdo + Arrastrar o Clic con la Rueda Central.
-- **Zoom**: Rueda del ratón (Scroll).
-- **Seleccionar vértices/puntos**: `Ctrl` + Clic Izquierdo o `Shift` + Clic Izquierdo (según modo de selección de Open3D).
+### 4. Open3D (`--use-open3d`)
+- **Rotar**: Clic Izquierdo + Arrastrar
+- **Pan**: `Ctrl` + Clic Izquierdo o Rueda Central + Arrastrar
+- **Zoom**: Rueda del ratón
+- **Seleccionar**: `Ctrl` + Clic Izquierdo o `Shift` + Clic Izquierdo
 
 ---
 
