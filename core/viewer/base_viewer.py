@@ -12,6 +12,11 @@ class BaseViewerAdapter(ABC):
         self.camera_controller = camera_controller
         self.point_size = 0.01
 
+    @property
+    def viewer(self):
+        """Underlying viewer handle if any (e.g. pptk viewer, pyvista plotter, etc.)."""
+        return None
+
     @abstractmethod
     def is_ready(self) -> bool:
         """Return True if viewer window/process is active and responsive."""

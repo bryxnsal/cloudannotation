@@ -87,6 +87,12 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
         self._rect_actor = None
         self._rect_pts = None
 
+    @property
+    def viewer(self):
+        """Plotter instance for backwards compatibility."""
+        with self._lock:
+            return self.plotter if self._is_running else None
+
     def is_ready(self) -> bool:
         with self._lock:
             return self._is_running and (self.plotter is not None)
@@ -431,11 +437,26 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
                     if key in ['c', 'C']:
                         self._picked_indices = []
                         self._apply_colors_to_polydata()
+                    elif key in ['e', 'E', 'q', 'Q']:
+                        # Abort VTK default exit action so cdann shortcut system handles the key
+                        obj.SetAbortEvent(1)
+
+                def on_char(obj, event):
+                    key = obj.GetKeySym()
+                    # In VTK, CharEvent for 'e', 'E', 'q', 'Q' triggers application exit
+                    if key in ['e', 'E', 'q', 'Q']:
+                        obj.SetAbortEvent(1)
+
+                def on_exit(obj, event):
+                    # User clicked window close (X)
+                    self._is_running = False
 
                 iren.AddObserver('LeftButtonPressEvent', on_left_down, 10.0)
                 iren.AddObserver('MouseMoveEvent', on_mouse_move, 10.0)
                 iren.AddObserver('LeftButtonReleaseEvent', on_left_up, 10.0)
-                iren.AddObserver('KeyPressEvent', on_key_press, 10.0)
+                iren.AddObserver('KeyPressEvent', on_key_press, 100.0)
+                iren.AddObserver('CharEvent', on_char, 100.0)
+                iren.AddObserver('ExitEvent', on_exit, 100.0)
 
                 with self._lock:
                     self.plotter = plotter
@@ -456,7 +477,7 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
                             print("PyvistaViewer: Action error:", qe)
 
                     with self._lock:
-                        if self.plotter is None:
+                        if self.plotter is None or getattr(self.plotter, '_closed', False):
                             break
                         self.plotter.update()
 
@@ -468,6 +489,11 @@ class PyvistaViewerAdapter(BaseViewerAdapter):
                 traceback.print_exc()
             finally:
                 self._is_running = False
+                with self._lock:
+                    self.plotter = None
+                    self.polydata = None
+                    self.actor = None
+                    self._rect_actor = None
                 ready_event.set()
 
         self._thread = threading.Thread(target=_run_loop, daemon=True)

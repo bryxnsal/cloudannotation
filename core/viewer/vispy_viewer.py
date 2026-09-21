@@ -125,6 +125,12 @@ class VispyViewerAdapter(BaseViewerAdapter):
         self._is_selecting = False
         self._select_start = None
 
+    @property
+    def viewer(self):
+        """Underlying canvas if running."""
+        with self._lock:
+            return self.canvas if self._is_running else None
+
     def is_ready(self) -> bool:
         with self._lock:
             return self._is_running and (self.canvas is not None)

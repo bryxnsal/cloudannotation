@@ -67,6 +67,12 @@ class Open3dViewerAdapter(BaseViewerAdapter):
         self._saved_view_params = None
         self._action_queue = queue.Queue()
 
+    @property
+    def viewer(self):
+        """Underlying visualizer if running."""
+        with self._lock:
+            return self.vis if self._is_running else None
+
     def is_ready(self) -> bool:
         """Return True if visualizer window is created and running."""
         with self._lock:
