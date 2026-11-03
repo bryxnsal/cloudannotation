@@ -310,16 +310,13 @@ def main():
 
     command_queue = queue.Queue()
 
-    # Determine 3D viewer engine: PyVista > VisPy > Open3D > PPTK (with Windows defaulting to VisPy/PyVista)
+    # Determine 3D viewer engine: PPTK > PyVista > VisPy > Open3D
     if opt.use_pyvista:
         chosen_viewer = 'pyvista'
     elif opt.use_vispy:
         chosen_viewer = 'vispy'
     elif opt.use_open3d:
         chosen_viewer = 'open3d'
-    elif sys.platform.startswith('win32'):
-        # On Windows PPTK binary wheel is unavailable; prefer VisPy/PyVista
-        chosen_viewer = 'vispy'
     else:
         chosen_viewer = 'pptk'
 
