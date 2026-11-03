@@ -1,6 +1,11 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.8.*"
+resolution-markers = [
+    "sys_platform == 'linux'",
+    "sys_platform == 'win32'",
+    "sys_platform != 'linux' and sys_platform != 'win32'",
+]
 
 [[package]]
 name = "addict"
@@ -110,7 +115,8 @@ dependencies = [
 all = [
     { name = "glfw" },
     { name = "open3d" },
-    { name = "pptk", marker = "sys_platform == 'linux'" },
+    { name = "pptkx", version = "0.1.2", source = { url = "https://github.com/bryxnsal/pptk-wayland/releases/download/v0.1.2/pptkx-0.1.2-cp38-cp38-linux_x86_64.whl" }, marker = "sys_platform == 'linux'" },
+    { name = "pptkx", version = "0.1.2", source = { url = "https://github.com/bryxnsal/pptk-wayland/releases/download/v0.1.2/pptkx-0.1.2-cp38-cp38-win_amd64.whl" }, marker = "sys_platform == 'win32'" },
     { name = "pyqt5" },
     { name = "pyvista" },
     { name = "vispy" },
@@ -120,7 +126,8 @@ open3d = [
     { name = "open3d" },
 ]
 pptk = [
-    { name = "pptk", marker = "sys_platform == 'linux'" },
+    { name = "pptkx", version = "0.1.2", source = { url = "https://github.com/bryxnsal/pptk-wayland/releases/download/v0.1.2/pptkx-0.1.2-cp38-cp38-linux_x86_64.whl" }, marker = "sys_platform == 'linux'" },
+    { name = "pptkx", version = "0.1.2", source = { url = "https://github.com/bryxnsal/pptk-wayland/releases/download/v0.1.2/pptkx-0.1.2-cp38-cp38-win_amd64.whl" }, marker = "sys_platform == 'win32'" },
 ]
 pyvista = [
     { name = "pyvista" },
@@ -144,8 +151,10 @@ requires-dist = [
     { name = "pandas", specifier = ">=1.1.5" },
     { name = "pillow", specifier = ">=8.4.0" },
     { name = "plyfile", specifier = ">=0.8" },
-    { name = "pptk", marker = "sys_platform == 'linux' and extra == 'all'", url = "https://github.com/ChadLin9596/pptk/releases/download/v0.1.1/pptk-0.1.1-cp38-none-manylinux_2_35_x86_64.whl" },
-    { name = "pptk", marker = "sys_platform == 'linux' and extra == 'pptk'", url = "https://github.com/ChadLin9596/pptk/releases/download/v0.1.1/pptk-0.1.1-cp38-none-manylinux_2_35_x86_64.whl" },
+    { name = "pptkx", marker = "sys_platform == 'linux' and extra == 'all'", url = "https://github.com/bryxnsal/pptk-wayland/releases/download/v0.1.2/pptkx-0.1.2-cp38-cp38-linux_x86_64.whl" },
+    { name = "pptkx", marker = "sys_platform == 'linux' and extra == 'pptk'", url = "https://github.com/bryxnsal/pptk-wayland/releases/download/v0.1.2/pptkx-0.1.2-cp38-cp38-linux_x86_64.whl" },
+    { name = "pptkx", marker = "sys_platform == 'win32' and extra == 'all'", url = "https://github.com/bryxnsal/pptk-wayland/releases/download/v0.1.2/pptkx-0.1.2-cp38-cp38-win_amd64.whl" },
+    { name = "pptkx", marker = "sys_platform == 'win32' and extra == 'pptk'", url = "https://github.com/bryxnsal/pptk-wayland/releases/download/v0.1.2/pptkx-0.1.2-cp38-cp38-win_amd64.whl" },
     { name = "pynput", specifier = ">=1.7.6" },
     { name = "pyqt5", marker = "extra == 'all'", specifier = ">=5.15.0" },
     { name = "pyqt5", marker = "extra == 'vispy'", specifier = ">=5.15.0" },
@@ -714,14 +723,34 @@ wheels = [
 ]
 
 [[package]]
-name = "pptk"
-version = "0.1.1"
-source = { url = "https://github.com/ChadLin9596/pptk/releases/download/v0.1.1/pptk-0.1.1-cp38-none-manylinux_2_35_x86_64.whl" }
+name = "pptkx"
+version = "0.1.2"
+source = { url = "https://github.com/bryxnsal/pptk-wayland/releases/download/v0.1.2/pptkx-0.1.2-cp38-cp38-linux_x86_64.whl" }
+resolution-markers = [
+    "sys_platform == 'linux'",
+]
 dependencies = [
     { name = "numpy" },
 ]
 wheels = [
-    { url = "https://github.com/ChadLin9596/pptk/releases/download/v0.1.1/pptk-0.1.1-cp38-none-manylinux_2_35_x86_64.whl", hash = "sha256:08613f6e12f45d5d2997f949354a96ab5f6deca72352ef771f2634d565817b26" },
+    { url = "https://github.com/bryxnsal/pptk-wayland/releases/download/v0.1.2/pptkx-0.1.2-cp38-cp38-linux_x86_64.whl", hash = "sha256:c70cca80c10e4f537afd29a3b12316f4d8c44a6c2ae182130978a197921bdd62" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "numpy" }]
+
+[[package]]
+name = "pptkx"
+version = "0.1.2"
+source = { url = "https://github.com/bryxnsal/pptk-wayland/releases/download/v0.1.2/pptkx-0.1.2-cp38-cp38-win_amd64.whl" }
+resolution-markers = [
+    "sys_platform == 'win32'",
+]
+dependencies = [
+    { name = "numpy" },
+]
+wheels = [
+    { url = "https://github.com/bryxnsal/pptk-wayland/releases/download/v0.1.2/pptkx-0.1.2-cp38-cp38-win_amd64.whl", hash = "sha256:b7dc19ed47f7ad61b9b59a1458e9269021cfb123037bddddc154e0595215854b" },
 ]
 
 [package.metadata]

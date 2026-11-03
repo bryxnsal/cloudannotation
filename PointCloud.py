@@ -177,7 +177,8 @@ class PointCloud:
         return self.render_flag and self.viewer_adapter.is_ready()
 
     def close_viewer(self):
-        self.viewer_adapter.close()
+        if hasattr(self, 'viewer_adapter') and self.viewer_adapter is not None:
+            self.viewer_adapter.close()
 
     def set_point_size(self, size):
         try:
