@@ -11,7 +11,9 @@
 
 ## Instalación global con `uv`
 
-El CLI requiere Python 3.8. La instalación recomendada instala soporte completo para todos los visores (`.[all]`) y deja el comando `cdann` disponible globalmente en tu terminal:
+El CLI requiere Python 3.8. La instalación recomendada proporciona soporte completo y deja el comando `cdann` disponible globalmente en tu terminal.
+
+### En Linux (Bash)
 
 ```bash
 # 1. Instalar uv (si no lo tienes instalado aún)
@@ -24,6 +26,25 @@ cd cloudannotation
 
 # 3. Instalar globalmente el CLI como cdann (en modo editable)
 uv tool install --python 3.8 -e ".[all]"
+# O solo con PPTK:
+# uv tool install --python 3.8 -e ".[pptk]"
+```
+
+### En Windows (PowerShell)
+
+```powershell
+# 1. Instalar uv (si no lo tienes instalado aún)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# 2. Descargar Python 3.8 y clonar el repositorio
+uv python install 3.8
+git clone https://github.com/bryxnsal/cloudannotation.git
+cd cloudannotation
+
+# 3. Instalar globalmente el CLI como cdann (en modo editable)
+uv tool install --python 3.8 -e ".[pptk]"
+# O con todos los visores:
+# uv tool install --python 3.8 -e ".[all]"
 ```
 
 ### Opciones de instalación:
@@ -33,13 +54,13 @@ Puedes instalar las dependencias según el visor 3D que prefieras utilizar:
 | Opción | Comando | Descripción |
 | :--- | :--- | :--- |
 | **Completa** | `uv tool install --python 3.8 --reinstall -e ".[all]"` | Instala todos los visores (**PyVista**, **VisPy**, **PPTK**, **Open3D**). |
+| **PPTK** | `uv tool install --python 3.8 --reinstall -e ".[pptk]"` | Visor nativo PPTK (`pptkx` con soporte nativo para **Linux** y **Windows**). |
 | **PyVista** | `uv tool install --python 3.8 --reinstall -e ".[pyvista]"` | Visor PyVista / VTK. |
 | **VisPy** | `uv tool install --python 3.8 --reinstall -e ".[vispy]"` | Visor VisPy OpenGL. |
-| **PPTK** | `uv tool install --python 3.8 --reinstall -e ".[pptk]"` | Visor nativo PPTK (Linux x86_64). |
 | **Open3D** | `uv tool install --python 3.8 --reinstall -e ".[open3d]"` | Visor Open3D. |
 
 > [!NOTE]
-> El wheel de PPTK está fijado por URL y SHA-256 en `pyproject.toml`, garantizando una instalación segura sin descargas de repositorios desconocidos.
+> El visor PPTK utiliza los binarios optimizados de [pptkx](https://github.com/bryxnsal/pptkx) con soporte nativo para **Linux (Wayland/X11)** y **Windows (MSVC x64)**.
 
 ### Actualizar el CLI (cuando hay nuevos cambios en el repositorio)
 
